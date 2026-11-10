@@ -11,10 +11,9 @@ npx contextmachines init     # once: finds your app, which AI reads it, the line
 npx contextmachines learn
 ```
 
-`init` works your project out from the folder: which app, how it starts, where it's running, how people sign in. If it isn't running, it offers to start it, and stops it again afterwards. It lists exactly which files it will change and asks first. On a local app a stand-in user usually gets past the sign-in for you; anywhere else, you sign in once yourself in a browser window with `--login`. [Behind a sign-in](#behind-a-sign-in) says how. To skip it, install the browser once and give the address yourself:
+`init` works your project out from the folder: which app, how it starts, where it's running, how people sign in. If it isn't running, it offers to start it, and stops it again afterwards. It lists exactly which files it will change and asks first. On a local app a stand-in user usually gets past the sign-in for you; anywhere else, you sign in once yourself in a browser window with `--login`. [Behind a sign-in](#behind-a-sign-in) says how. To skip it, give the address yourself. The first time, it offers to download its browser (once, about 270 MB); in CI, run `npx playwright@1.61.0 install chromium` first:
 
 ```bash
-npx playwright@1.61.0 install chromium
 npx contextmachines learn https://yourapp.com
 ```
 
@@ -382,7 +381,7 @@ Context Machines collects nothing about you or your runs, and there is no accoun
 
 - **the site you point it at**, through the browser, including whatever that site's pages load themselves (scripts, fonts, images);
 - **the AI you choose**, if any: two questions per run, none when the product hasn't changed (with `--ai ollama` it stays on your machine, with `--ai none` there is none). If you said yes to reading your code, some of your source code goes to that AI too, in a handful of questions, and `map.json` lists every file;
-- **Playwright's browser download**, once, when you run `npx playwright@1.61.0 install chromium`.
+- **Playwright's browser download**, once, when you say yes to it in `init` or `learn`, or run `npx playwright@1.61.0 install chromium`.
 
 A signed-in Claude Code or Codex is its own program, with its own settings for what it reports to its maker; Context Machines starts it with only the question.
 

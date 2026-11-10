@@ -4,6 +4,8 @@ What changed in each release, for the people running it. Versions follow [semant
 
 ## Unreleased
 
+- **The first run just works.** `learn` on a machine with no browser yet used to stop and tell you to run `npx playwright install chromium`. In a terminal it now offers the one-time download (about 270 MB), with a yes, and carries on. In CI or a pipe it still says how, as before.
+
 ## 0.1.2 - 2026-11-10
 
 - **Always on your plan.** With `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` exported, Claude Code and Codex used to bill that key while the run said it was on your plan. The key isn't passed to them now (an LLM gateway, Bedrock or Vertex keeps its settings). To use a key, pass `--ai anthropic` or `--ai openai`.

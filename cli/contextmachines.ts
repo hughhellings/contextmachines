@@ -28,7 +28,7 @@ import { chosenStorageKey, detectProject, detectUrl, hasAppCode, listeners, notF
 import { readRepo } from "./repo.ts";
 import { understand, type Understood } from "./understand.ts";
 import { AI_CHOICES, aiTotals, pickAi, timedAi, type Ai, type AskTiming } from "./ai.ts";
-import { INIT_ABOUT, INIT_EXIT_MEANINGS, INIT_OPTIONS, readProjectConfig, runInit, saveAddress } from "./init.ts";
+import { browserCommand, browserInstalled, INIT_ABOUT, INIT_EXIT_MEANINGS, INIT_OPTIONS, installBrowser, readProjectConfig, runInit, saveAddress } from "./init.ts";
 import {
   badgeWords, behindSignIn, compare, deadStart, diff, filesToClear, FIX_FILE, fixDoc, fixLines, fixPhoto, goneSince, newSince, groupFindings, groupTargets, groupText, HOME, issueText, journeyHeadline, journeyLive, journeyMap, journeyTree, journeysNotWalked, keptNoMainAction, leftForAnotherSite, liveAddress, liveIssues, MANIFEST, MAP_SCHEMA, mayKeepDataHere, moreFixLines, fixRest, forPasting, nextLines, outInUse, jpegSize, type PhotoBoxes, photoName, plural,
   productDoc, productFile, PRODUCT_NEW, provenCount, publicUrl, redact, referredPhotos, reportPage, resultLines, rowLines, screenName, signUpIn, startUrl, stoppedFrom, summaryRows, usageWords, wallNext, whyNoJourneys, whyNothing, withLiveAddresses, writePrivate, type Fix, type Prediction, type ProductMap,
@@ -429,6 +429,9 @@ if (process.stdin.isTTY && process.stdout.isTTY && !json) {
   const answer = await reach(start);
   if (answer === "no-host") fail(whyNothing("ENOTFOUND", start), EXIT.couldNot);
   if (answer === "refused") await askForTheAddress();
+  // No browser yet, as on a first run: a download, so asked for, never taken by itself. Where it can't
+  // be asked (a pipe, CI) the run ends saying how, as before.
+  if (!(await browserInstalled())) await askForTheBrowser();
 }
 
 /**
@@ -526,6 +529,28 @@ async function nothingAnswers(url: URL) { return (await reach(url)) !== "answers
  * The right address, asked for there and then. A server running from this very folder is offered
  * first. An answer that works replaces what was saved, so the next run doesn't ask again.
  */
+/** The one-time browser download, asked for with one yes, timed as it goes; no, or a failure, ends the run saying how. */
+async function askForTheBrowser(): Promise<void> {
+  const c = errColors;
+  const reply = await ask(`${c.cyan("?")} No browser yet. Download one now? It's once, about 270 MB. ${c.dim("(Y/n)")} `);
+  if ("cancelled" in reply) stoppedUnchanged("", EXIT.interrupted);
+  if (/^n/i.test(reply.answer.trim())) missingBrowser();
+  const stop = new AbortController();
+  const onStop = () => stop.abort();
+  process.once("SIGINT", onStop);
+  const begun = Date.now();
+  const line = () => `  ${c.dim(`downloading the browser ${seconds(Date.now() - begun)} · ${browserCommand()}`)}`;
+  process.stderr.write(line());
+  const tick = setInterval(() => process.stderr.write(`\r${line()}`), 1000);
+  const ok = await installBrowser(stop.signal);
+  clearInterval(tick);
+  process.off("SIGINT", onStop);
+  process.stderr.write("\r\x1b[2K");
+  if (stop.signal.aborted) stoppedUnchanged("", EXIT.interrupted);
+  if (!ok) missingBrowser();
+  process.stderr.write(`${c.green("✓")} browser downloaded ${c.dim(seconds(Date.now() - begun))}\n`);
+}
+
 async function askForTheAddress(): Promise<void> {
   const c = errColors;
   const dead = publicUrl(start);

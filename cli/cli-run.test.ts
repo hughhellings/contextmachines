@@ -1,6 +1,6 @@
 // The command line around a run: what it checks before one, what it says first, how Ctrl-C ends
 // one, and how the new user's part ends on an app with no sign-up. Through the real command.
-//   node --test apps/cli/cli-run.test.ts
+//   node --test cli/cli-run.test.ts
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

@@ -178,7 +178,7 @@ const LIVE_PROBES: Probes = {
 };
 
 /** The download for the Playwright this runs with: a bare `npx playwright` may fetch another version, whose browser this one can't use. */
-function browserCommand(): string {
+export function browserCommand(): string {
   let version = "";
   try {
     version = `@${(createRequire(import.meta.url)("playwright/package.json") as { version: string }).version}`;
@@ -187,6 +187,10 @@ function browserCommand(): string {
   }
   return `npx playwright${version} install chromium`;
 }
+
+/** Whether the browser is there, and its download: for learn, which asks for it as init does. */
+export const browserInstalled = (): Promise<boolean> => LIVE_PROBES.browserInstalled();
+export const installBrowser = (stop: AbortSignal): Promise<boolean> => LIVE_PROBES.installBrowser(stop);
 
 export interface AiOption {
   /** What `--ai` takes, so that the choice saved here is one `learn` understands. */
