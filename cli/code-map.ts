@@ -407,6 +407,32 @@ export function clip(text: string, max: number): string {
   return `${(space > max * 0.6 ? head.slice(0, space) : head).replace(/[\s,;:]+$/, "")}…`;
 }
 
+/** Kept text cut again as clip cuts now, so a read kept from before a change to clip reads whole. */
+function reclipScreen(screen: CodeScreen): CodeScreen {
+  const labelled = (items: { label: string; evidence: string }[]) => items.map((item) => ({ ...item, label: clip(item.label, 120) }));
+  return { ...screen, name: clip(screen.name, 120), ...(screen.purpose ? { purpose: clip(screen.purpose, 300) } : {}), buttons: labelled(screen.buttons), fields: labelled(screen.fields) };
+}
+
+function reclipAction(action: CodeAction): CodeAction {
+  return { ...action, label: clip(action.label, 120), does: clip(action.does, 300), ...(action.rule ? { rule: { ...action.rule, text: clip(action.rule.text, 300) } } : {}) };
+}
+
+/** A whole kept read, its text cut again (see reclipScreen). */
+function reclipRead(read: Kept): Kept {
+  const f = read.fromCode;
+  return {
+    ...read,
+    fromCode: {
+      ...f,
+      product: f.product === null ? null : clip(f.product, 600),
+      mainAction: f.mainAction ? { ...f.mainAction, why: clip(f.mainAction.why, 300) } : null,
+      journeys: f.journeys.map((j) => ({ ...j, name: clip(j.name, 120) })),
+      screens: f.screens.map(reclipScreen),
+      actions: f.actions.map(reclipAction),
+    },
+  };
+}
+
 /** The line a quote starts on is a comment, or the quote sits after a trailing comment marker. */
 export function inComment(whole: string, at: number): boolean {
   const start = whole.lastIndexOf("\n", at) + 1;
@@ -808,7 +834,7 @@ export async function readCode(walk: Walk, ai: AskJson & { via?: string; light?:
   const key = fingerprint(repo, ai, schema);
   const parts = new Parts(opts.cacheFile);
   const cached = parts.whole(key);
-  if (cached) return { ...cached, reused: true, costUsd: 0 };
+  if (cached) return { ...reclipRead(cached), reused: true, costUsd: 0 };
 
   const kept = new Map(repo.files.map((f) => [f.path, f]));
   const dropped = new Tally();
@@ -942,7 +968,7 @@ export async function readCode(walk: Walk, ai: AskJson & { via?: string; light?:
         // What it said of the files was sent to the AI, on an earlier run: still part of what was read.
         note(sent, cut);
         if (known.why) reasons.set(route.path, known.why);
-        return known.read;
+        return known.read && { ...known.read, screen: reclipScreen(known.read.screen), actions: known.read.actions.map(reclipAction) };
       }
       if (Date.now() >= outOfTime) return void reasons.set(route.path, "out of time: the next run reads it");
       note(sent, cut);

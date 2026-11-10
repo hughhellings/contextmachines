@@ -76,6 +76,18 @@ describe("sign_in_first", () => {
     assert.deepEqual(kinds({ ...wall, journeys: [...wall.journeys, { name: "Sign up", screens: ["/"] }] }), []);
     assert.deepEqual(kinds({ ...wall, screens: [...wall.screens, screen("/sign-up")] }), []);
   });
+  it("trap: an app whose screens mostly opened without a session is public: newcomers use it without an account", () => {
+    // The stand-in pass ran and found nothing behind the sign-in.
+    const ran = { ...wall.learner!, standIn: { status: "no_adapter", message: "", reached: 0, notReached: [] } };
+    assert.deepEqual(kinds({ ...wall, learner: ran }), []);
+    // The product behind the sign-in was only seen with the made-up user.
+    const behind: Learned = { ...wall, screens: [wall.screens[0]!, ...calm.screens.slice(1).map((s) => ({ ...s, seenWith: "stand-in" as const }))] };
+    assert.deepEqual(kinds({ ...behind, screens: [...behind.screens, screen("/pricing", "Pricing")] }), ["sign_in_first"], "one public page beside the product is not a public app");
+  });
+  it("without a stand-in pass, the open pages beside a sign-in don't make an app public", () => {
+    const door: Learned = { ...calm, screens: [screen("/login", "Log in"), screen("/terms", "Terms"), screen("/privacy", "Privacy"), screen("/help", "Help")], url: "https://app.example/login" };
+    assert.deepEqual(kinds(door), ["sign_in_first"]);
+  });
   it("trap: a login box in a sidebar heading doesn't make a page a sign-in screen", () => {
     assert.deepEqual(kinds({ ...calm, screens: [screen("/", "Acme Bank | Welcome", ["Customer Login"]), ...calm.screens.slice(1)] }), []);
   });

@@ -15,6 +15,7 @@
 import { spawn } from "node:child_process";
 import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -30,10 +31,10 @@ import { AI_CHOICES, aiTotals, pickAi, timedAi, type Ai, type AskTiming } from "
 import { INIT_ABOUT, INIT_EXIT_MEANINGS, INIT_OPTIONS, readProjectConfig, runInit, saveAddress } from "./init.ts";
 import {
   badgeWords, behindSignIn, compare, deadStart, diff, filesToClear, FIX_FILE, fixDoc, fixLines, fixPhoto, goneSince, newSince, groupFindings, groupTargets, groupText, HOME, issueText, journeyHeadline, journeyLive, journeyMap, journeyTree, journeysNotWalked, keptNoMainAction, leftForAnotherSite, liveAddress, liveIssues, MANIFEST, MAP_SCHEMA, mayKeepDataHere, moreFixLines, fixRest, forPasting, nextLines, outInUse, jpegSize, type PhotoBoxes, photoName, plural,
-  productDoc, productFile, PRODUCT_NEW, provenCount, publicUrl, redact, referredPhotos, reportPage, resultLines, rowLines, screenName, startUrl, stoppedFrom, summaryRows, usageWords, wallNext, whyNoJourneys, whyNothing, withLiveAddresses, writePrivate, type Fix, type Prediction, type ProductMap,
+  productDoc, productFile, PRODUCT_NEW, provenCount, publicUrl, redact, referredPhotos, reportPage, resultLines, rowLines, screenName, signUpIn, startUrl, stoppedFrom, summaryRows, usageWords, wallNext, whyNoJourneys, whyNothing, withLiveAddresses, writePrivate, type Fix, type Prediction, type ProductMap,
 } from "./report.ts";
 import { LIVE_MIN_COLUMNS, liveWanted, MOST_WIDTH, PARTS, RunScreen, type Group, type StepEnd } from "./run-screen.ts";
-import { AGENT_NAMES, agentHere, clipboardFor, copyText, endMenu, fixPrompt, menuKeys, menuLine, openerFor, openFile, startAgent } from "./hand-off.ts";
+import { AGENT_NAMES, agentHere, clipboardFor, copyText, endMenu, fixPrompt, menuKeys, menuLine, onPath, openerFor, openFile, startAgent } from "./hand-off.ts";
 import { ask, colors, colorWanted, columnsOf, confirm, ignoreBrokenPipes, inForeground, keyWanted, linked, linksWanted, padTo, rule, safe, seconds, suggest, visibleWidth, waitForKey, wrapItems, wrapTo, type Colors } from "./term.ts";
 
 ignoreBrokenPipes();
@@ -89,6 +90,8 @@ function fail(message: string, code: number, more: { fix?: string; note?: string
   process.stderr.write(`${lines.map((line, n) => `${n ? " " : c.red("×")} ${line}`).join("\n")}${usage}\n`);
   if (more.fix) process.stderr.write(`  ${c.dim("Try:")} ${c.cyan(safe(more.fix))}\n`);
   if (more.note) process.stderr.write(`  ${c.dim(more.note)}\n`);
+  // Under --json, stdout says it too: a build reads stdout, and empty says nothing.
+  if (json) process.stdout.write(`${JSON.stringify({ ok: false, exit: code, error: said })}\n`);
   process.exit(code);
 }
 /** Ends once everything written to stdout has been taken: a pipe on macOS takes it later than write() returns. */
@@ -401,6 +404,9 @@ try {
 } catch (error) {
   fail(firstLine(error), EXIT.usage);
 }
+// An agent asked for by name is run by its command: missing, it's said now, not as the first question failing.
+const agentCommand = ai?.agent && (aiChoice === "claude-code" || aiChoice === "codex") ? ai.agent : undefined;
+if (agentCommand && !onPath(agentCommand)) fail(`--ai ${aiChoice} needs the ${agentCommand} command on your PATH: install ${aiChoice === "codex" ? "Codex" : "Claude Code"} and sign in, or use --ai none`, EXIT.usage);
 const out = resolve(str("out") ?? "contextmachines");
 /** The output folder as the person would type it: relative to here, with forward slashes. */
 const shown = (() => {
@@ -589,13 +595,18 @@ const stopping = new AbortController();
 /** The output folder has been made: from here, a second Ctrl-C may leave something of this run in it. */
 let outPrepared = false;
 let interrupted = false;
+let interruptedAt = 0;
+/** A second Ctrl-C this soon after the first is the same press: under npx, npm passes on one the terminal already sent. */
+const SAME_PRESS_MS = 500;
 const stopRun = () => {
   if (interrupted) {
+    if (Date.now() - interruptedAt < SAME_PRESS_MS) return;
     screen?.stop("stopped");
     process.stderr.write(outPrepared ? "\n" : `${errColors.yellow("!")} Stopped; nothing was written.\n`);
     process.exit(EXIT.interrupted);
   }
   interrupted = true;
+  interruptedAt = Date.now();
   stopping.abort();
   say(`${paint().yellow("!")} ${paint().yellow("Stopping: writing what it learned so far (press Ctrl-C again to quit now)")}`);
 };
@@ -688,11 +699,23 @@ const onStage = (stage: ScanStage) => {
 let standInSaid = false;
 /** The new account's walk, as it will be reported, once it's known. */
 let newUserWalk: Extract<ScanStage, { kind: "new-user" }>["walk"] | undefined;
+/** Whether the public pages showed a way to make an account (see signUpIn): asked again once they're all known. */
+let signUpSeen = false;
+/** The public crawl's reviews, as the sign-in was met: the crawl's own list, which goes on growing until it's over. */
+let wallReviews: ScanResult["reviews"] = [];
+/** The new account's group, ended without a walk: a warning only where there was a sign-up to walk past. */
+const newUserNotWalked = (group: Group, stopped?: string, at?: number) => {
+  if (signUpSeen || stopped) group.end("warned", words("not walked", foundWords(group)), stopped, at);
+  else group.end("done", words("no sign-up seen", foundWords(group)), undefined, at);
+};
 /** The new account's group ends with what its walk came to. Its time is the walk's, not the wait's after it. */
 const newUserEnds = () => {
   const group = newUserGroup;
   if (!group?.running || !newUserWalk) return;
+  // The walk is told once every public page is known: a sign-up found after the sign-in counts too.
+  signUpSeen ||= signUpIn(publicPaths, wallReviews);
   if (newUserWalk.status === "walked") group.end("done", words(plural(newUserWalk.screens.length, "screen"), foundWords(group)), undefined, walkedAt);
+  else if (!signUpSeen && !interrupted) newUserNotWalked(group, undefined, walkedAt);
   else {
     group.note(paint().dim(badgeWords(safe(redact(newUserWalk.message)))));
     standInSaid = true;
@@ -729,14 +752,26 @@ const itemsMeasured = (checks: ScreenCheck[]) => itemSaid(checks.map((check) => 
 const noCodeHere = !hasAppCode(codeRoot);
 /** The folder the app is served from, when that's another one than this: the agent isn't started here either. */
 let servedElsewhere: string | undefined;
-if (local) {
-  servedElsewhere = servedFromElsewhere(Number(start.port || 80), process.cwd(), await listeners().catch(() => []));
-  const sayNoCode = noCodeHere && !flag("no-code") && !process.env.CI;
+if (local) servedElsewhere = servedFromElsewhere(Number(start.port || 80), process.cwd(), await listeners().catch(() => []));
+/** A folder as the person knows it: their home folder as ~. */
+const homeShort = (path: string) => {
+  const home = homedir();
+  return home && (path === home || path.startsWith(`${home}${sep}`)) ? `~${path.slice(home.length)}` : path;
+};
+/** Said at the first screen, once the address has answered: an address that doesn't answer is the thing to say first. */
+let codeWarned = false;
+const warnAboutCode = () => {
+  if (codeWarned || !local) return;
+  codeWarned = true;
+  const sayNoCode = !flag("no-code") && !process.env.CI;
+  const where = servedElsewhere && safe(homeShort(servedElsewhere));
   // Both at once is one line: where the app's code is already says where to run it from.
-  if (servedElsewhere && sayNoCode) run.note("warn", `no app code here: ${safe(start.host)} is served from ${safe(servedElsewhere)}, so run it from there`);
-  else if (servedElsewhere) run.note("warn", `${safe(start.host)} is served from another folder (${safe(servedElsewhere)}), not this one: what's learned is about that app.`);
-  else if (sayNoCode) run.note("warn", "no app code here, so no file:line for fixes: run it from your app's folder");
-}
+  if (where && noCodeHere && sayNoCode) run.note("warn", `no app code here: ${safe(start.host)} is served from ${where}, so run it from there`);
+  else if (where) run.note("warn", `${safe(start.host)} is served from another folder (${where}), not this one: what's learned is about that app.`);
+  else if (noCodeHere && sayNoCode) run.note("warn", "no app code here, so no file:line for fixes: run it from your app's folder");
+  // File:line comes from the repository's files: without one, the code is there and no fix points into it.
+  else if (sayNoCode && !repoRootOf(codeRoot)) run.note("warn", "not a git repository, so fixes won't have file:line: run git init && git add -A first");
+};
 const wall = wallPlanned(Boolean(session) || flag("create"));
 let codeRead: CodeRead | undefined;
 /** Set while the code is being read beside the browser: the run waits for it before it writes. */
@@ -832,6 +867,8 @@ async function pastTheWall(crawl: ScanResult, walls: readonly string[]): Promise
   const project = detectProject(codeRoot, await listeners().catch(() => []));
   const elsewhere = servedFromElsewhere(Number(start.port || 80), codeRoot, await listeners().catch(() => []));
   // Only a try: whether it gets anywhere is for the pass to find out, and the result to say.
+  signUpSeen = signUpIn(crawl.pagesVisited, crawl.reviews);
+  wallReviews = crawl.reviews;
   newUserGroup = run.group(PARTS.newUser);
   newUserGroup.detail(project.auth?.held !== "server" ? "trying a made-up new account" : "checking the sign-in");
   /** Files the seal may believe in by name, only when this folder is what's being served. */
@@ -894,6 +931,7 @@ const scan = await scanSite({
   onScreen: (path, n, named, asStandIn) => {
     if (screensSaid.size === 0) {
       run.note("done", "browser ready", seconds(Date.now() - begun));
+      warnAboutCode();
       // A blank line between the setup lines and the parts of the run, as a test runner leaves.
       run.log();
     }
@@ -968,13 +1006,14 @@ reached("browser ends");
   if (publicGroup?.running) publicGroup.end(how, publicWords(), stopped, publicOverAt);
   // Still running: the stand-in's pass ended before the new account was walked, and its own words say why.
   const why = scan.standIn && scan.standIn.status !== "reached" ? badgeWords(safe(redact(scan.standIn.message))) : undefined;
+  signUpSeen ||= signUpIn(scan.pagesVisited, scan.reviews);
   newUserEnds();
   if (newUserGroup?.running) {
-    if (why && !interrupted) {
+    if (why && !interrupted && signUpSeen) {
       newUserGroup.note(paint().dim(why));
       standInSaid = true;
     }
-    newUserGroup.end("warned", words("not walked", foundWords(newUserGroup)), stopped);
+    newUserNotWalked(newUserGroup, stopped);
   }
   const reachedThere = scan.standIn?.status === "reached";
   const group = madeUpGroup;
@@ -1018,7 +1057,7 @@ if (scan.startOrigin !== start.origin) start = new URL(`${start.pathname}${start
 // After a Ctrl-C, nothing more is asked of the AI: the person wants it over, and the reading would add seconds and cost.
 const asking = ai && !interrupted ? aiFor("review") : undefined;
 const reviewGroup = asking ? run.group(PARTS.review) : undefined;
-reviewGroup?.doing(`reading the product and reviewing the screens, with ${ai!.via}`);
+reviewGroup?.doing(`reading the product and screens with ${ai!.via}`);
 // The code as it stands, read here and for nothing that leaves: only to find where drawn words live.
 const fromCode = codeRead?.ran ? codeRead.fromCode : undefined;
 const { repo, sources } = repoRootOf(codeRoot) ? sourcesOf(codeRoot, scan, fromCode) : { repo: undefined, sources: { files: [], tied: () => new Set<string>(), home: () => undefined } };
@@ -1169,6 +1208,7 @@ const learned = {
     // What left the machine stays on record, whether or not anything came of it.
     ...(codeRead ? { codeRead: codeRead.ran ? { ran: true, filesSent: codeRead.fromCode.coverage.filesSent, reused: codeRead.reused, costUsd: codeRead.costUsd, ...(codeRead.routesAgain && !codeRead.reused ? { routesAgain: codeRead.routesAgain } : {}) } : { ran: false, why: codeRead.why, reason: redact(codeRead.reason), filesSent: codeRead.filesSent, costUsd: codeRead.costUsd } } : {}),
     ...(wallOffer ? { wallOffer } : {}),
+    ...(aiChoice ? { aiFlag: aiChoice } : {}),
     measured: new Set([...scan.reviews, ...(scan.newUser?.screens ?? [])].map((r) => r.path)).size,
     timing: { stages, scan: scan.timings, asks },
     // Every question to the AI added up, as the last rows say it: tokens as the AI said, dollars only where it gave a price.

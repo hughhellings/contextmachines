@@ -1,8 +1,11 @@
 // Which model gets which ask, and what happens when the small one can't answer.
 //   node --test cli/ai.test.ts
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
-import { aiTotals, anthropicUsage, claudeCodeUsage, codexUsage, compatibleUsage, failure, pickAi, timedAi, withLight, type Ai, type AskTiming } from "./ai.ts";
+import { agentEnv, aiTotals, anthropicUsage, claudeCodeUsage, codexUsage, commandMissing, compatibleUsage, failure, pickAi, timedAi, withLight, type Ai, type AskTiming } from "./ai.ts";
 import { tokenCount } from "./term.ts";
 
 const fake = (model: string, answer: (question: string) => string): Ai & { asked: string[] } => {
@@ -159,8 +162,8 @@ describe("an agent's own words", () => {
     assert.equal(failure("codex", 1, codexErr(coded, "o9"), "", QUESTION), 'codex can\'t use the model "o9": pass --model with one your plan has', "named from its header");
   });
   it("still gives Claude Code's sign-in hint, from what it said on either stream", () => {
-    assert.equal(failure("claude", 1, "", '{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}'), 'claude: exit 1 (run claude and sign in, or set ANTHROPIC_API_KEY)');
-    assert.equal(failure("claude", 1, 'API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}', ""), "claude: invalid x-api-key (run claude and sign in, or set ANTHROPIC_API_KEY)");
+    assert.equal(failure("claude", 1, "", '{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}'), 'claude: exit 1 (run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY)');
+    assert.equal(failure("claude", 1, 'API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}', ""), "claude: invalid x-api-key (run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY)");
     assert.equal(failure("claude", 1, "something broke", ""), "claude: something broke");
   });
   it("reads Codex's one total of tokens from the end of its stderr, with the model that answered", () => {
@@ -170,5 +173,37 @@ describe("an agent's own words", () => {
     assert.equal(codexUsage(codexErr("tokens used\n12\ncodex\nOK\ntokens used\n1,234,567"))?.output, 1234567, "the last, after the question");
     assert.equal(codexUsage("OpenAI Codex\ncodex\nOK\ntokens used\n5")?.model, undefined, "no header, no model guessed");
     assert.equal(codexUsage(codexErr("codex\nOK")), undefined);
+  });
+});
+
+describe("Claude Code on the person's plan", () => {
+  const env = { PATH: "/bin", ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t", ANTHROPIC_MODEL: "m", CLAUDE_CODE_OAUTH_TOKEN: "o", AWS_SECRET_ACCESS_KEY: "s" };
+  it("never gets an Anthropic API key or token, which it would bill: its sign-in and other settings stay", () => {
+    assert.deepEqual(Object.keys(agentEnv("claude", env)).sort(), ["ANTHROPIC_MODEL", "CLAUDE_CODE_OAUTH_TOKEN", "PATH"]);
+  });
+  it("keeps the key and token behind a gateway at ANTHROPIC_BASE_URL, which signs in with them", () => {
+    const gateway = agentEnv("claude", { ...env, ANTHROPIC_BASE_URL: "https://proxy.example" });
+    assert.ok("ANTHROPIC_BASE_URL" in gateway && "ANTHROPIC_API_KEY" in gateway && "ANTHROPIC_AUTH_TOKEN" in gateway);
+    assert.ok(!("AWS_SECRET_ACCESS_KEY" in gateway));
+  });
+  it("keeps everything as it was on Bedrock or Vertex, billed by that cloud", () => {
+    const bedrock = agentEnv("claude", { ...env, CLAUDE_CODE_USE_BEDROCK: "1" });
+    assert.ok("ANTHROPIC_API_KEY" in bedrock && "ANTHROPIC_AUTH_TOKEN" in bedrock && "AWS_SECRET_ACCESS_KEY" in bedrock);
+    assert.ok("ANTHROPIC_API_KEY" in agentEnv("claude", { ...env, CLAUDE_CODE_USE_VERTEX: "1" }));
+  });
+});
+
+describe("an agent that isn't installed", () => {
+  it("says so plainly, not Node's spawn ENOENT", { skip: process.platform === "win32" && "agents aren't used on Windows" }, async () => {
+    assert.equal(commandMissing("claude"), "the claude command isn't installed or isn't on your PATH: install Claude Code and sign in, or use --ai none");
+    assert.equal(commandMissing("codex"), "the codex command isn't installed or isn't on your PATH: install Codex and run codex login, or use --ai none");
+    const path = process.env.PATH;
+    process.env.PATH = mkdtempSync(join(tmpdir(), "contextmachines-empty-"));
+    try {
+      await assert.rejects(pickAi("claude-code", "sonnet")!.ask("s", "q", {}), { message: commandMissing("claude") });
+      await assert.rejects(pickAi("codex", undefined)!.ask("s", "q", {}), { message: commandMissing("codex") });
+    } finally {
+      process.env.PATH = path;
+    }
   });
 });

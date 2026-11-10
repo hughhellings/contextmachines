@@ -84,6 +84,8 @@ export type StandInStatus =
   | "seal_failed"
   /** Nothing the app did matched a sign-in library the stand-in knows. Nothing from the pass is in the result. */
   | "no_adapter"
+  /** Not run: the sign-in library it was told is one the stand-in doesn't know. Nothing of the pass reached the site. */
+  | "unknown_provider"
   /** The server decides what these addresses show, so the browser can't stand in. Nothing from the pass is in the result. */
   | "server_auth"
   /** The library was found, but the app never took the session, or no screen past the public ones drew. Nothing from the pass is in the result. */

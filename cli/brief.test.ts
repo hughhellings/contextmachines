@@ -90,6 +90,22 @@ describe("what an AI says has to hold up", () => {
     const item = checkItem(good({ problem: "surprise_rule", title: "A limit drops older rows", fix: "Say so first", quotes: [], code: [{ file: "src/a.js", quote: "const note = 'older rows weren’t saved: the limit applies';" }] }), { ...facts, repo: spelled });
     assert.equal((item as { code: { line: number }[] }).code[0]?.line, 2);
   });
+  it("won't say a limit comes with no warning when a screen's code names it", () => {
+    const rule = "if (rows.length > FREE_IMPORT_LIMIT) rows = rows.slice(0, FREE_IMPORT_LIMIT);";
+    const files = (banner: string) => ({ files: [{ path: "src/import.ts", text: `${rule}\n`, bytes: 0 }, { path: "src/ImportPage.tsx", text: banner, bytes: 0 }] });
+    const item = good({ problem: "surprise_rule", title: "Free imports are cut short with no warning", fix: "Say the import limit before the import starts", quotes: [], code: [{ file: "src/import.ts", quote: rule }] });
+    const warned = files("{rows.length > FREE_IMPORT_LIMIT && <p>Free plans import the first rows only</p>}\n");
+    assert.equal(checkItem(item, { ...facts, repo: warned }), "the screens' code tells it");
+    assert.notEqual(typeof checkItem(item, { ...facts, repo: files("<p>Import your file</p>\n") }), "string", "no screen names it: the claim stands");
+    const plain = good({ problem: "surprise_rule", title: "Free imports are cut short", fix: "Say the import limit before the import starts", quotes: [], code: [{ file: "src/import.ts", quote: rule }] });
+    assert.notEqual(typeof checkItem(plain, { ...facts, repo: warned }), "string", "a rule that doesn't claim silence stands");
+    const handedOn = files('import { FREE_IMPORT_LIMIT } from "./import";\nexport const Page = () => <Importer limit={FREE_IMPORT_LIMIT} />;\n');
+    assert.notEqual(typeof checkItem(item, { ...facts, repo: handedOn }), "string", "a prop or an import only hands it on: nothing is drawn");
+    assert.equal(checkItem(item, { ...facts, repo: files("<p>Up to {FREE_IMPORT_LIMIT} rows on the free plan</p>\n") }), "the screens' code tells it");
+    assert.equal(checkItem(item, { ...facts, repo: files("const note = `Only ${FREE_IMPORT_LIMIT} rows are imported`;\n") }), "the screens' code tells it");
+    const hidden = good({ problem: "surprise_rule", title: "The import limit is hidden in settings", fix: "Say the import limit before the import starts", quotes: [], code: [{ file: "src/import.ts", quote: rule }] });
+    assert.notEqual(typeof checkItem(hidden, { ...facts, repo: warned }), "string", "hidden isn't saying nobody was told");
+  });
   it("takes a rule from two screens, the promise and the taking back", () => {
     const two = good({ problem: "surprise_rule", screen: id("/report"), title: "One screen offers what another takes back", fix: "Say so on the first screen", quotes: [{ screen: id("/report"), words: "Upgrade to Team to read this report" }, { screen: id("/orders"), words: "Plans start with the free tier" }] });
     assert.notEqual(typeof checkItem(two, facts), "string");

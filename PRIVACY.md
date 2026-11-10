@@ -4,7 +4,7 @@ What `contextmachines` does with the site it learns, and with what it sees there
 
 ## It runs on your machine
 
-- The browser, the learning and the understanding all run in the `contextmachines` process. The understanding is the same code the hosted product uses (`packages/understanding`), called directly (`cli/understand.ts`). Nothing is uploaded to Context Machines.
+- The browser, the learning and the understanding all run in the `contextmachines` process. The understanding (`packages/understanding`) is called directly (`cli/understand.ts`). There is no Context Machines server, and nothing is uploaded to one.
 - The one call out of your machine that `contextmachines` makes itself is to the AI you choose, if any (see below). With `--ai ollama` or `--ai none`, nothing leaves your machine except the visits to the site: the browser's, and a `HEAD` request from Node to check the address answers before the browser starts.
 - `init` can download the browser for you (Playwright's own download, from Playwright's servers). It asks first, and `--yes` doesn't count as a yes.
 - `init` asks Claude Code and Codex, if you have them, whether you're signed in (`claude auth status`, `codex login status`). Claude Code runs with its telemetry and update checks off, as it does for every ask.
@@ -121,7 +121,7 @@ Addresses are reduced to patterns before anything is recorded: ids, emails, file
 
 It never contains a field's value, anything typed, a request's or response's values, cookies, the saved sign-in, or screen photos. On a stand-in run it covers those screens too, and the AI is told their contents are made up.
 
-Headings and titles are the page's own text. On a screen that shows one record they can include that record's name ("Invoice for Acme Ltd"). Signed out, numbers in that text are kept, since they are the site's public text; on a real session (`--login`, `--session`, `--create`), they are masked, as the hosted snippet masks them. Learn with a test account if names matter.
+Headings and titles are the page's own text. On a screen that shows one record they can include that record's name ("Invoice for Acme Ltd"). Signed out, numbers in that text are kept, since they are the site's public text; on a real session (`--login`, `--session`, `--create`), they are masked. Learn with a test account if names matter.
 
 The second is the review behind the fix list (`cli/brief.ts`): where does a person get stuck, wait, pay before they see value, or lose work? It's at most about 24 KB of text, and contains, for up to 30 screens, new-account screens first:
 

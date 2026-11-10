@@ -93,6 +93,8 @@ export interface ProductMap {
     standIn?: { status: string; message: string; provider?: string; reached: number; notReached: NotReached[]; errors?: string[]; stoppedBy?: string; rowsShown?: boolean };
     /** What became of reading the code, when it was asked for. filesSent: whatever left the machine, even if the read stopped. */
     codeRead?: { ran: boolean; why?: string; reason?: string; filesSent: string[]; reused?: boolean; costUsd?: number; routesAgain?: string[] };
+    /** The --ai this run was given, so a command it suggests runs the same AI (see wallNext). */
+    aiFlag?: string;
     /** What to try to see more, when nothing got past the sign-in here (see wallNext). */
     wallOffer?: "go-local" | "add-code" | "read-code" | "drop-no-code" | "login";
     /** Screens measured for the fix list, and what became of the AI's review of them. */
@@ -290,16 +292,12 @@ function journeySection(map: Pick<ProductMap, "journeyWalk">): string[] {
   type Journey = JourneyWalkMap["journeys"][number];
   const signUp = walk.journeys.filter((j) => j.fields !== undefined).map((j) => `The sign-up on ${mdCode(j.from)} asks for ${plural(j.fields!, "box", "boxes")}.`);
   const kinds = journeyKinds(walk);
-  let hidden = 0;
-  /** Names, at most MOST_NAMED of them, the rest counted as left out. */
-  const names = (all: readonly string[]) => {
-    hidden += Math.max(0, all.length - MOST_NAMED);
-    return all.slice(0, MOST_NAMED).join(", ");
-  };
+  /** Names, at most MOST_NAMED of them, and how many more, so the names add up to the count before them. */
+  const names = (all: readonly string[]) => `${all.slice(0, MOST_NAMED).join(", ")}${all.length > MOST_NAMED ? `, and ${all.length - MOST_NAMED} more (map.json)` : ""}`;
   // Site text, each piece written through mdText or mdCode, so the line around them needs neither.
   const named = (j: Journey) => `${mdText(`"${j.name}"`, 120)} on ${mdCode(j.from)}${j.fromCode ? " (read from the code, not seen)" : ""}`;
   const finished = kinds.finished.slice(0, MOST_JOURNEY_LINES).map((j) => `- ${mdText(journeyLine(j), 300)}`);
-  hidden += kinds.finished.length - finished.length;
+  const hidden = kinds.finished.length - finished.length;
   const stops = kinds.byStop.map(([kind, js]) => {
     const why = kind === "file" ? "A person would choose a real file there, and none was given." : `${js.length === 1 ? "It" : "Each"} ${STOP_WORDS[kind].replace(/^it /, "")}, so the walk stopped before it.`;
     const picked = js.some((j) => j.pick) ? " Where the walk took one of several choices to get there, it's that choice that ends, not the journey." : "";
@@ -321,7 +319,7 @@ function journeySection(map: Pick<ProductMap, "journeyWalk">): string[] {
     ...follow,
     ...(ranOut.length ? [`- Time ran out before ${ranOut.length === 1 ? "this one" : `these ${ranOut.length}`} finished: ${names(ranOut)}.`] : []),
     ...(notReached.length ? [`- ${notReached.length} couldn't be reached: ${names(notReached)}.`] : []),
-    ...(hidden > 0 ? [`- ...and ${plural(hidden, "journey")} more in map.json`] : []),
+    ...(hidden > 0 ? [`- ...and ${plural(hidden, "finished journey")} more in map.json`] : []),
     ...signUp.map((line) => `- ${line}`),
     ...(walk.leftAlone ? [`- Left alone: ${plural(walk.leftAlone, "control")} that read as destroying something or signing out.`] : []),
     ...(walk.noCodeHints ? ["- The code wasn't read in time, or at all, so this is only what the screens offered."] : []),
@@ -511,15 +509,20 @@ export const savesOf = (map: Pick<ProductMap, "actions">) => map.actions.filter(
 
 /**
  * The address to learn from what was typed. Without a scheme, a machine's own server is plain http
- * (that's how local servers run); anywhere else is https.
+ * (that's how local servers run), and so is a one-word name with a port (a docker-compose or CI
+ * service, "web:3000"); anywhere else is https.
  */
 export function startUrl(target: string): URL | undefined {
   try {
     const bare = !/^https?:\/\//i.test(target);
     let url = new URL(bare ? `https://${target}` : target);
-    if (bare && isLocalHost(url.hostname)) url = new URL(`http://${target}`);
-    // A real host: a name with a dot, localhost, or an address.
-    if (!/^(localhost|[a-z0-9-]+(\.[a-z0-9-]+)+|\[[0-9a-f:]+\])$/i.test(url.hostname)) return undefined;
+    // One word is a host when a scheme or a port says so ("http://web", "web:3000"); alone it is a typo ("lern").
+    // The port as typed: the URL drops one that's the scheme's own ("web:80", "web:443").
+    const word = /^[a-z0-9-]+$/i.test(url.hostname);
+    const port = /^[^/?#]*:\d+(?:[/?#]|$)/.test(target);
+    if (bare && (isLocalHost(url.hostname) || (word && port))) url = new URL(`http://${target}`);
+    // A real host: a name with a dot, a one-word name as above, localhost, or an address.
+    if (!/^(localhost|[a-z0-9-]+(\.[a-z0-9-]+)+|\[[0-9a-f:]+\])$/i.test(url.hostname) && !(word && (!bare || port))) return undefined;
     return url;
   } catch {
     return undefined;
@@ -757,6 +760,19 @@ export function whyNothing(error: string, start: URL, seen: { status?: number; t
 /** A screen that is only the way in: its last address segment names signing in ("/login", "/auth/sign-in"), not one that merely mentions it ("/blocks/login-01"). */
 const SIGN_IN_ADDRESS = /(^|[/#])(log-?in|sign-?in|sign_in|session\/new)\/?$/i;
 const SIGN_IN_WORDS = /\b(log ?in|sign ?in)\b/i;
+
+/** An address for making an account: "/signup", "/users/sign_up", "/register". */
+const SIGN_UP_ADDRESS = /(?:^|\/)(?:sign[-_]?up|register|join|create[-_]?account)(?:\/|$)/i;
+/** A short link or button that makes an account, wherever in its words ("Don't have an account? Sign up"). "Join" only leads one, or says now or free: "Join the call" isn't it. */
+const MAKES_ACCOUNT = /\b(?:sign ?up|register|create (?:a |an |your |my )?(?:free )?account)\b|^join\b|\bjoin (?:now|free|for free)\b/i;
+
+/**
+ * Whether the public pages showed a way to make an account: a sign-up address, or a link or button
+ * that says so. An app with none has no new user to walk, which is nothing to warn about.
+ */
+export function signUpIn(paths: Iterable<string>, reviews: readonly { controls: readonly { kind: string; label: string }[] }[]): boolean {
+  return [...paths].some((path) => SIGN_UP_ADDRESS.test(path)) || reviews.some((review) => review.controls.some((control) => control.kind !== "field" && control.label.trim().length <= 60 && MAKES_ACCOUNT.test(control.label.trim())));
+}
 
 /**
  * Whether a sign-in stands between this run and the product, so that signing in is the way to learn
@@ -1247,10 +1263,12 @@ export interface PhotoBoxes {
  */
 export function reportPage(map: ProductMap, start: URL, photoBoxes: ReadonlyMap<string, PhotoBoxes> = new Map(), out = "contextmachines"): string {
   const esc = escHtml;
+  // A folder far from here is named in full, and the page is shared: its photos stay named from the output folder, as FIX.md names them.
+  const pasteFrom = isAbsolute(out) || /^[a-z]:[\\/]/i.test(out) ? "" : out;
   const fixes = map.fixes ?? [];
   const body = [
     pageHead(map, start, esc),
-    `<section id="problems">${map.fixes ? fixCards(map, start, esc, photoBoxes, out) : findingsAsProblems(map, esc)}${predictionsHtml(map, esc)}${goneHtml(map, esc)}</section>`,
+    `<section id="problems">${map.fixes ? fixCards(map, start, esc, photoBoxes, pasteFrom) : findingsAsProblems(map, esc)}${predictionsHtml(map, esc)}${goneHtml(map, esc)}</section>`,
     notCheckedHtml(map, esc),
     `<section id="reference"><h2>Reference</h2>${[screensRef(map, esc), journeysRef(map, esc), map.fixes ? issuesRef(map, esc) : "", actionsRef(map, esc), understoodRef(map, esc), codeRef(map, esc)].join("")}</section>`,
     `<footer>Written by Context Machines v${esc(pageVersion())}${map.learnedAt ? ` on ${esc(map.learnedAt.slice(0, 10))}` : ""} · each run writes this page again. ${map.learner?.savesWentThrough ? "Saves went through for real (--create), except any that said they destroy." : "Saves were answered in the browser."}</footer>`,
@@ -1368,7 +1386,7 @@ function fixCards(map: ProductMap, start: URL, esc: (v: unknown) => string, phot
     const places = f.where ? (f.where.line ? [`${f.where.file}:${f.where.line}`, ...(f.where.also ?? [])] : [f.where.file, ...(f.where.also ?? [])]) : [];
     const where = f.where
       ? `${f.where.line ? "" : `<span class="muted">look in </span>`}${places.map((p) => `<span class="place">${path(p)}<button class="copy small" type="button" data-copy-text="${esc(p)}">Copy</button></span>`).join(" ")}${f.where.code ? `<div class="line" title="the line as it stands">${esc(oneLine(f.where.code, 120))}</div>` : ""}`
-      : `<span class="muted">not found: search the code for the words below</span>`;
+      : searchFor(f) ? `<span class="muted">not found: search the code for </span>${path(searchFor(f)!)}` : `<span class="muted">not found</span>`;
     const facts = [
       `<dt>where</dt><dd>${where}</dd>`,
       `<dt>seen</dt><dd>${shown}${marked}${rest}</dd>`,
@@ -1436,7 +1454,7 @@ function notCheckedHtml(map: ProductMap, esc: (v: unknown) => string): string {
   const items = [
     ...(signInNote(map) ? [plain(signInNote(map))] : []),
     ...(readingNote(map) ? [plain(readingNote(map))] : []),
-    ...(l?.signInFirst || l?.stoppedAtDoor ? [`${esc(signInWords(map))}${l.standIn && l.standIn.status !== "reached" ? ` ${esc(badgeWords(l.standIn.message))}` : ""}${nextHtml(wallNext(map), esc)}`] : []),
+    ...(l?.signInFirst || l?.stoppedAtDoor ? [allOpenWords(map) ?? `${esc(signInWords(map))}${l.standIn && l.standIn.status !== "reached" ? ` ${esc(badgeWords(l.standIn.message))}` : ""}${nextHtml(wallNext(map), esc)}`] : []),
     ...(limitNote(map) ? [plain(limitNote(map))] : []),
     ...(l?.standIn?.notReached.length ? [`Screens the made-up user couldn't open: ${paths(l.standIn.notReached)}`] : []),
     ...(map.newUser && map.newUser.status !== "walked" ? [`No new account was walked: ${esc(map.newUser.message)}`] : []),
@@ -2177,6 +2195,8 @@ export function shortOfWhole(map: ProductMap, { standInSaid = false }: { standIn
   if (!l) return undefined;
   const standIn = l.standIn;
   if (l.signInFirst || l.stoppedAtDoor || (standIn && !standInScreens(map).length)) {
+    // Every screen opened signed out: nothing was kept from it (PRODUCT.md says so).
+    if (allOpenWords(map)) return undefined;
     // Said once: under its group on the run's screen, when that's where it was said.
     if (standIn && !standInScreens(map).length) return standInSaid ? undefined : badgeWords(safe(standIn.message, 400));
     return signInWords(map);
@@ -2203,6 +2223,23 @@ export function signInWords(map: Pick<ProductMap, "screens" | "url">): string {
   const open = openPast(map);
   if (!open.length) return "It never got past the sign-in, so what's behind it went unseen.";
   return `It met a sign-in; ${plural(open.length, "other screen")} opened without one (${open.slice(0, 3).join(", ")}${open.length > 3 ? ` and ${open.length - 3} more` : ""}), but nothing was seen as a signed-in user.`;
+}
+
+/**
+ * Every screen the run found opened without a session: a sign-in was met, but the stand-in user found
+ * nothing that asked for one, and nothing it couldn't open. Said so, rather than that only the public
+ * part was seen. Only no_adapter says the pass ran: a library it doesn't know (unknown_provider) stops
+ * it before it opens anything.
+ */
+export function allOpenWords(map: Pick<ProductMap, "screens" | "learner">): string | undefined {
+  const standIn = map.learner?.standIn;
+  const signIn = (s: { path: string; title?: string | null }) => SIGN_IN_ADDRESS.test(s.path) || SIGN_IN_PAGE.test(s.path) || SIGN_IN_WORDS.test(s.title ?? "");
+  // The sign-in page itself, held at its own form, isn't a screen kept from it.
+  const kept = standIn?.notReached.filter((r) => !(r.why === "sign_in" && map.screens.some((s) => s.path === r.path && signIn(s))));
+  if (standIn?.status !== "no_adapter" || kept?.length || map.screens.some((s) => s.seenWith)) return undefined;
+  const n = map.screens.filter((s) => !signIn(s)).length;
+  if (!n) return undefined;
+  return n === 1 ? "The one screen it found opened without signing in." : `All ${n} screens it found opened without signing in.`;
 }
 
 /** Screens other than the start the browser opened by itself, signed out, that aren't a sign-in. */
@@ -2250,11 +2287,13 @@ function wallRow(map: ProductMap): string[] {
 export function wallNext(map: Pick<ProductMap, "learner" | "url">, localUrl = "http://localhost:3000"): string | undefined {
   const offer = map.learner?.wallOffer;
   const url = publicUrl(map.url);
-  if (offer === "go-local") return `Next: to get past the sign-in, run your app and learn it there: npx contextmachines learn ${localUrl}`;
-  if (offer === "add-code") return `Next: to have your AI read what's behind the sign-in: npx contextmachines learn ${url} --code`;
+  // The AI the person chose stays chosen: without it, the command would ask whichever comes first.
+  const ai = map.learner?.aiFlag && /^[\w.-]+$/.test(map.learner.aiFlag) ? ` --ai ${map.learner.aiFlag}` : "";
+  if (offer === "go-local") return `Next: to get past the sign-in, run your app and learn it there: npx contextmachines learn ${localUrl}${ai}`;
+  if (offer === "add-code") return `Next: to have your AI read what's behind the sign-in: npx contextmachines learn ${url} --code${ai}`;
   if (offer === "read-code") return `Next: to have your AI read what's behind the sign-in, run this in a git repository with --ai: npx contextmachines learn ${url} --code (or use a test account: --login)`;
-  if (offer === "drop-no-code") return `Next: to have your AI read what's behind the sign-in, run again without --no-code: npx contextmachines learn ${url} --code`;
-  if (offer === "login") return `Next: to see past the sign-in, use a test account: npx contextmachines learn ${url} --login`;
+  if (offer === "drop-no-code") return `Next: to have your AI read what's behind the sign-in, run again without --no-code: npx contextmachines learn ${url} --code${ai}`;
+  if (offer === "login") return `Next: to see past the sign-in, use a test account: npx contextmachines learn ${url} --login${ai}`;
   return undefined;
 }
 
@@ -2480,6 +2519,15 @@ const PHOTO_PATH = /^screens\/[a-z0-9~_.-]+\.jpg$/;
 /** An item's title as a heading: no full stop at its end, as none of the others has one. */
 const fixTitle = (f: Pick<Fix, "title">) => f.title.replace(/(?<!\.\.)\.\s*$/, "");
 
+/**
+ * What to search the code for when no place was found: the item's own words on the screen (a quote,
+ * or a label in its title), the address it's about, or a script error's message.
+ */
+export function searchFor(f: Pick<Fix, "title" | "quotes">): string | undefined {
+  const title = fixTitle(f);
+  return f.quotes?.[0]?.words ?? /"([^"\n]{2,})"/.exec(title)?.[1] ?? /^Script error: (.+)$/.exec(title)?.[1] ?? /(?:^|\s)(https?:\/\/\S+|\/[^\s)]+)/.exec(title)?.[1];
+}
+
 /** Which walk saw an item seen with made-up data: the new account's when every screen it's on is one of its, else the made-up user's. */
 function walkOf(f: Fix, newUserPaths: ReadonlySet<string>): string {
   return f.newUser || (f.screens.length > 0 && f.screens.every((p) => newUserPaths.has(p))) ? "new user" : "made-up user";
@@ -2564,9 +2612,15 @@ function fixFirstLines(map: ProductMap): string[] {
   const item = (f: Fix) => `${numberOf(map.fixes!, f)}. **${mdText(fixTitle(f))}**${f.where ? ` (${placeInMd(f.where)})` : ""}${fixMark(f)}`;
   const proven = shown.filter((f) => f.status === "proven");
   const predicted = shown.filter((f) => f.status === "predicted");
-  if (proven.length) lines.push(`${PROVEN_WORDS}`, "", ...proven.map(item), "");
+  // Proven ones left out for the best prediction get a line where they'd be, as on the terminal (see gapLine), so the numbers run on.
+  const from = proven.length ? numberOf(map.fixes, proven[proven.length - 1]!) + 1 : 1;
+  const left = predicted.length ? numberOf(map.fixes, predicted[0]!) - from : 0;
+  // One list item however many it stands for: "5–7." isn't one, and would run into the item before.
+  const gap = left > 1 ? [`${from}. _${left} more (${from}–${from + left - 1}) in ${FIX_FILE}_`] : left === 1 ? [`${from}. _in ${FIX_FILE}_`] : [];
+  if (proven.length || gap.length) lines.push(`${PROVEN_WORDS}`, "", ...proven.map(item), ...gap, "");
   if (predicted.length) lines.push(PREDICTED_WORDS, "", ...predicted.map(item), "");
-  lines.push(`Evidence and what to do about ${map.fixes.length === 1 ? "it" : `all ${map.fixes.length}`}: [${FIX_FILE}](${FIX_FILE}).`, "");
+  const unshown = map.fixes.length - shown.length;
+  lines.push(`Evidence and what to do about ${map.fixes.length === 1 ? "it" : `all ${map.fixes.length}`}${unshown ? `, ${unshown} not shown here` : ""}: [${FIX_FILE}](${FIX_FILE}).`, "");
   return lines;
 }
 
@@ -2576,15 +2630,17 @@ export const AGENT_WORDS = "For a coding agent: work through these in order. Che
 /**
  * Text from FIX.md as it's pasted into an agent somewhere else: its photos named from where the run
  * was (`contextmachines/screens/…`), not from the output folder, so an agent at the app's root finds
- * them. Only the Photo lines this file writes are changed, never a word from the site.
+ * them. Only the Photo lines this file writes are changed, never a word from the site. With no
+ * folder, they stay as FIX.md has them.
  */
 export function forPasting(text: string, out: string): string {
+  if (!out) return text;
   return text.replace(/^- \*\*Photo:\*\* \[(screens\/[^\]\n]+)\]\((screens\/[^)\n]+)\)$/gm, (_, shownAs: string, to: string) => `- **Photo:** [${out}/${shownAs}](${out}/${to})`);
 }
 
 /** Each item in full, for a person or a coding agent to act on. */
 function fixEntry(f: Fix, n: number): string[] {
-  const places = f.where ? [`- **Where to change it:** ${placeInMd(f.where)}${f.where.code ? `, the line ${mdCode(f.where.code, 200)}` : ""}${f.where.line && f.where.also?.length ? `, and ${f.where.also.map((place) => mdCode(place, 600)).join(", ")}` : ""}`] : ["- **Where to change it:** not found. Search the code for the words below."];
+  const places = f.where ? [`- **Where to change it:** ${placeInMd(f.where)}${f.where.code ? `, the line ${mdCode(f.where.code, 200)}` : ""}${f.where.line && f.where.also?.length ? `, and ${f.where.also.map((place) => mdCode(place, 600)).join(", ")}` : ""}`] : [`- **Where to change it:** not found${searchFor(f) ? `: search the code for ${mdCode(searchFor(f)!, 200)}` : ""}.`];
   const seen = f.screens.slice(0, 6).map((p) => mdCode(p)).join(", ");
   return [
     `### ${n}. ${mdText(fixTitle(f), 200)}${f.new ? ` ${NEW_MARK}` : ""}`,
@@ -2746,7 +2802,7 @@ function notCheckedLines(map: ProductMap): string[] {
   const missed = [
     ...(review && !review.ran ? [`The AI didn't review the screens: ${REVIEW_FAILED[review.why ?? "failed"] ?? "it didn't run"}. Only measured items are here.`] : []),
     ...(review?.ran && Object.keys(review.dropped).length ? [`${droppedWords(Object.values(review.dropped).reduce((a, b) => a + b, 0))}`] : []),
-    ...(l?.signInFirst || l?.stoppedAtDoor ? [`${mdText(signInWords(map))}${l.standIn && l.standIn.status !== "reached" ? ` ${mdText(badgeWords(l.standIn.message))}` : ""}${nextInMd(wallNext(map))}`] : []),
+    ...(l?.signInFirst || l?.stoppedAtDoor ? [allOpenWords(map) ?? `${mdText(signInWords(map))}${l.standIn && l.standIn.status !== "reached" ? ` ${mdText(badgeWords(l.standIn.message))}` : ""}${nextInMd(wallNext(map))}`] : []),
     ...(l && l.stoppedBy !== "complete" ? [`It stopped before seeing everything (${mdText(stopWords(l))}).`] : []),
     ...(map.newUser && map.newUser.status !== "walked" ? [`No new account was walked: ${mdText(map.newUser.message)}`] : []),
     ...(map.newUser?.notReached ?? []).slice(0, 8).map((n) => `A new account couldn't open ${mdCode(n.path)}: ${NOT_REACHED_WORDS[n.why] ?? mdText(n.why)}.`),

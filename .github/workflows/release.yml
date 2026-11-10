@@ -3,7 +3,8 @@ name: Release
 # A release is a tag, v1.2.3, on a commit whose CHANGELOG.md has a "## 1.2.3 - <date>" section.
 # It builds that version, tries the packed package as a user would, publishes it to npm with
 # Trusted Publishing (no npm token), makes the GitHub release from that CHANGELOG section, and
-# moves the Action's tag to it.
+# moves the Action's tag to it. Trusted Publishing needs the npm package's trusted publisher set to
+# this repository's release.yml.
 #
 # The Action's tag is the one the README tells people to use, and it only moves within releases that
 # promise not to break them. While Context Machines is 0.x a minor may change the output, the options

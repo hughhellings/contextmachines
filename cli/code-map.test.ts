@@ -559,6 +559,34 @@ describe("the whole-run cache", () => {
     assert.ok(changed.sent[0]!.includes("Screen: /admin"));
     assert.ok(read.fromCode.coverage.filesSent.includes("src/Ledger.tsx"), "what an earlier run sent is still said to have gone");
   });
+
+  it("cuts a kept read's text again as clip does now, whole or in parts", async () => {
+    const root = repo(FILES);
+    const cacheFile = join(mkdtempSync(join(tmpdir(), "cm-cache-")), "read.json");
+    made.push(dirname(cacheFile));
+    await readCode(walk(), fakeAi(), root, { cacheFile });
+    // Written by an older clip: 302 characters, cut mid-word.
+    const long = "This screen lists the entries and covers only that part of the ledger. ".repeat(5).slice(0, 279) + "it covers only that pat";
+    assert.equal(long.length, 302);
+    const saved = JSON.parse(readFileSync(cacheFile, "utf8"));
+    saved.read.fromCode.mainAction = { label: "Add entry", why: long };
+    saved.read.fromCode.screens[0].purpose = long;
+    for (const part of Object.values(saved.parts) as { read?: { screen: { purpose?: string } } }[]) if (part.read) part.read.screen.purpose = long;
+    writeFileSync(cacheFile, JSON.stringify(saved));
+
+    const whole = ran(await readCode(walk(), fakeAi(), root, { cacheFile }));
+    assert.equal(whole.reused, true);
+    assert.equal(whole.fromCode.mainAction!.why, clip(long, 300));
+    assert.ok(whole.fromCode.mainAction!.why.length <= 300 && !whole.fromCode.mainAction!.why.includes("pat"));
+    assert.equal(whole.fromCode.screens[0]!.purpose, clip(long, 300));
+
+    delete saved.key;
+    writeFileSync(cacheFile, JSON.stringify(saved));
+    const fromParts = ran(await readCode(walk(), fakeAi(), root, { cacheFile }));
+    assert.equal(fromParts.reused, false);
+    assert.ok(fromParts.fromCode.screens.some((s) => s.purpose === clip(long, 300)));
+    assert.ok(!fromParts.fromCode.screens.some((s) => s.purpose === long));
+  });
 });
 
 describe("reading beside the browser", () => {

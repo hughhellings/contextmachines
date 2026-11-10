@@ -2,21 +2,23 @@
 
 [![npm](https://img.shields.io/npm/v/contextmachines)](https://www.npmjs.com/package/contextmachines) [![Apache-2.0 licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](https://github.com/hughhellings/contextmachines/blob/main/LICENSE) [![CI](https://github.com/hughhellings/contextmachines/actions/workflows/ci.yml/badge.svg)](https://github.com/hughhellings/contextmachines/actions/workflows/ci.yml)
 
-Finds what to fix in your web app. In a few minutes it walks your product the way a new user would, and gives you a short list of real things to change, each with where to change it, to hand to your coding agent.
+Finds what to fix in your web app. In a few minutes it walks your product the way a new user would, and gives you a short list to hand to your coding agent: problems it proved, and predictions marked as such, each with a file and line where it can find one.
+
+The new-user walk works on your own machine where the browser decides who's signed in: `supabase-js` in a client-rendered app, or a client-rendered app that asks its own `/api`. For anything else, use `--login` with a test account.
 
 ```bash
 npx contextmachines init     # once: finds your app, which AI reads it, the line for your coding agent
 npx contextmachines learn
 ```
 
-`init` works your project out from the folder: which app, how it starts, where it's running, how people sign in. If it isn't running, it offers to start it, and stops it again afterwards. It lists exactly which files it will change and asks first. Nobody signs in by hand: [behind a sign-in](#behind-a-sign-in) says how. To skip it, install the browser once and give the address yourself:
+`init` works your project out from the folder: which app, how it starts, where it's running, how people sign in. If it isn't running, it offers to start it, and stops it again afterwards. It lists exactly which files it will change and asks first. On a local app a stand-in user usually gets past the sign-in for you; anywhere else, you sign in once yourself in a browser window with `--login`. [Behind a sign-in](#behind-a-sign-in) says how. To skip it, install the browser once and give the address yourself:
 
 ```bash
 npx playwright@1.61.0 install chromium
 npx contextmachines learn https://yourapp.com
 ```
 
-![A terminal running npx contextmachines learn on the example invoicing app: the list of what to fix first, with the file and line of a button that does nothing, then what it understood the product is for](.github/assets/terminal.svg)
+![A terminal running npx contextmachines learn on the example invoicing app: each screen it walked, then the list of what to fix first: a button that does nothing with its file and line, and a predicted item](.github/assets/terminal.svg)
 
 > [!NOTE]
 > Context Machines is 0.x. What it prints, its options and the shape of `map.json` may still change between minor versions (0.1 to 0.2), never in a patch (0.1.0 to 0.1.1); [CHANGELOG.md](CHANGELOG.md) says what changed. The GitHub Action's `@v0.1` tag moves only to 0.1.x patches.
@@ -25,44 +27,34 @@ A browser follows links, opens menus and pop-ups, fills in forms with test value
 
 ```
 ℹ learning localhost:3000 · AI: your Claude Code sign-in · saves stopped
-  up to 3 min exploring, up to 2 min more at a sign-in · v0.1.0
+  up to 3 min exploring, up to 2 min more at a sign-in · v0.1.2
 ✓ browser ready 1.1s
 
 ✓  public  7 screens · sign-in at / · 1 found  38s
-  × /dashboard  9.3s  1 found
+  × /dashboard  9.2s  1 found
     ⚑ "Import invoices" does nothing when pressed
-  ✓ /  6.2s
+  ✓ /  6.1s
   ✓ /clients/new  9.1s
-  ✓ /invoices/new  3.1s
+  ✓ /invoices/new  3.2s
   ✓ /reports  3.4s
   ✓ /settings/payments  4.2s
   ✓ /invoices/:id  2.9s
-!  new user  not walked  2s
-  The app didn't take the new account's session, so nothing was seen as one.
-✓  ai review  1 predicted  12s  ai 11.0k tokens · 35% cached
+✓  new user  no sign-up seen  2s
+✓  ai review  7 reviewed · none predicted  9s  ai 10.0k tokens · 100% cached
 
-──────────────────────────────── Fix first 2 ─────────────────────────────────
+──────────────────────────────── Fix first 1 ─────────────────────────────────
 
   1. proven     "Import invoices" does nothing when pressed
      where      index.html:73
      seen       /dashboard
      evidence   contextmachines/screens/dashboard.jpg
-  2. predicted  Every field, VAT number included, must be filled in before a
-                first client can be saved
-     where      index.html:86
-     seen       /clients/new
-     evidence   contextmachines/screens/clients_new-2727df.jpg
 
-  Might trip people up (predictions, not proven)
-  ? Welcome back: no way to sign up was seen (/)
-  ? Save invoice: needs "Save client" first (/invoices/new)
-
-  Findings  1 proven · 3 predicted
+  Findings  1 proven
    Screens  7 seen
-        AI  11.0k tokens · 35% cached · 2 asks
+        AI  10.0k tokens · 100% cached · 2 asks
             claude-haiku-5-5 + claude-opus-5-5 · on your Claude Code plan
-  Start at  10:45:11
-  Duration  52s · first finding at 34s
+  Start at  18:23:57
+  Duration  48s · first finding at 34s
 
  → Hand contextmachines/FIX.md to your coding agent
   The page: contextmachines/report.html
@@ -339,7 +331,7 @@ With `--login` or `--session` it acts as that account: everything it reads, it r
 
 ### With `--create`
 
-Saves go through, so it can reach what only exists after creating something. A write passes only if nothing in its address, its headers or its body says it destroys, and a press on a control that says it destroys, or says nothing at all, isn't made. That's best effort: a destructive write with a neutral name and body goes through, and commands that don't destroy (Publish, Approve) are pressed. Writes to other addresses are never sent. Use it on test accounts only.
+Saves go through, so it can reach what only exists after creating something. A write passes only if nothing in its address, its headers or its body says it destroys, and a press on a control that says it destroys, or says nothing at all, isn't made. That's best effort: a destructive write with a neutral name and body goes through, and commands that don't destroy (Publish, Approve, Send) are pressed, and what they send goes through. Writes to other addresses are never sent. Use it on test accounts only.
 
 ## Limits
 
@@ -358,9 +350,9 @@ Saves go through, so it can reach what only exists after creating something. A w
 - **A page whose own address looks like a cart command is treated as one.** `/blog/add-to-cart` is stopped, not read.
 - **State kept only in the browser means no main action is named.** With nothing sent to a server, it sees no save to pick from.
 - **The default of a few minutes can stop before the whole product is seen.** Raise `--minutes` for a bigger one.
-- **How long it takes was measured on one app.** A real app of about 20 screens behind a sign-in, on a laptop, with a signed-in Claude Code: the first proven item at 24 seconds, a first run in 3 to 4 minutes (3m 17s to 3m 40s over several runs), and a repeat in about 3 (2m 34s to 3m 05s: the slowest was a run where the AI named more screens, which can happen on any run). The same app took 12m 43s before this design. The small model's routes fail the check on one run in five or so on that app, and the same question passes the next time, so it gets one more go, which adds about a minute. If that fails too, your main model reads them, which adds about 2 minutes more. On the one run where the reason was kept, the small model named none of the screens the browser saw, which reads as the wrong repository. Why they failed is in `map.json`, under `learner.codeRead.routesAgain`. A bigger app takes longer: the browser's part follows `--minutes` and `--pages`, and the AI's follows your model and your account's limits. Other AIs weren't timed. Each run's own times are in `map.json`, under `learner.timing`.
+- **How long it takes was measured on one app.** On an app of about 20 screens behind a sign-in, on a laptop, with a signed-in Claude Code: the first proven problem at about 24 seconds, a first run in 3 to 4 minutes, and later runs in about 2½ minutes. A bigger app takes longer: the browser's part follows `--minutes` and `--pages`, and the AI's follows your model and your account's limits. Other AIs weren't timed. Each run's own times are in `map.json`, under `learner.timing`.
 - **A first run reads the code it has time for.** The screens get about a minute, a new person's first, staff ones last, and at most 15. What didn't get read is listed, and the next run starts there. A file that changes costs a question about that screen only.
-- **A smaller model reads the code where your AI lets it choose.** It's checked the same way as any other, so what it misses is missed, not made up. The routes go back to your main model when the small one's can't be tied to the site. The review of the screens, where judgement counts, always uses your main model, and so does everything with `--model` or Codex.
+- **A smaller model reads the code where your AI lets it choose.** It's checked the same way as any other, so what it misses is missed, not made up. When the small model's routes can't be tied to the site, it asks once more, then your main model, which adds a minute or two. Why is in `map.json`, under `learner.codeRead.routesAgain`. The review of the screens, where judgement counts, always uses your main model, and so does everything with `--model` or Codex.
 - **The journeys' browser asks for less motion** (`prefers-reduced-motion`), as a person may, so an app's animations don't hold up each step. An app that draws different screens for that is walked as it draws them then. Nothing that browser sees is a finding.
 - **Journeys walk as a new, empty account.** What needs a record to exist already is listed as out of reach, and a sign-up is shown as stopped at its last press: it's never sent. What's behind it is walked as the made-up account instead, so steps to first value start after it.
 - **The journey list changes from run to run,** with what the code read names and what the time limit leaves, so one found this run may be missing the next. The main action can change too, and a predicted item may come and go.
@@ -377,7 +369,7 @@ Saves go through, so it can reach what only exists after creating something. A w
 - **A file only a dev server knows about can fail to load.** A file in no folder your app's own page loads from isn't believed to be a file. The screen may lose an image, or fail to draw and be reported as not reached.
 - **Public pages may differ on a local run.** Fonts, trackers and anything else from another host don't load. A page that needed a script it wasn't given gives no issues on that load, so a real fault there can be missed.
 - **Photos carry no made-up mark in the image.** A stand-in photo pasted on its own looks real. The mark is in `PRODUCT.md` and `map.json`.
-- **Cookie banners and chat bubbles stay in the photos**, and can cover the bottom of a screen.
+- **Cookie banners are declined before the photo**, where they offer a way to decline, on a run with no real session. Chat bubbles stay in the photos, and can cover the bottom of a screen.
 - **Sample rows have flaws of their own.** A screen may show a blank name or two numbers that disagree. That comes from the made-up rows, not your app.
 - **Sign-in is called "not needed for this run" only when rows really drew.** Without an AI to make rows, screens show their empty state, and it says so.
 - **A quote check proves a line exists, not that a claim about it is right.** When the same line appears twice, the citation can point at the wrong one.
@@ -412,7 +404,7 @@ Report a vulnerability privately: [SECURITY.md](SECURITY.md).
 
 ## See where real users get stuck
 
-This is the outside view: what a new user can see and do. Seeing where real people hesitate, hunt for something or keep getting a form rejected takes their visits. That's the hosted beta, coming soon.
+This is the outside view: what a new user can see and do. Seeing where real people get stuck takes their visits; a hosted version for that is planned.
 
 ## More
 

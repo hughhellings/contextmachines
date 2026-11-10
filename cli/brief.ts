@@ -66,6 +66,7 @@ Rules, checked by machine. An item that breaks one is thrown away:
 - Screens marked "made-up data" were seen with invented records. Layout, fixed wording and flow there are real. Numbers, names and records are invented: never quote a number from one, and never build an item on one. In your own words use no number that isn't in your evidence.
 - Screens marked "data kept away by this run" or "data answered empty by this run" drew without their real data: this run stopped those calls or answered them itself. What such a screen says about having nothing is this run's doing, so report nothing about it being empty or having no way on, unless its words say a person simply hasn't done something yet.
 - Each screen's navigation isn't listed, but it is there. Never say a screen has no way back, no way on or no link anywhere.
+- Before saying a rule or limit is hidden, silent or comes with no warning, look through the screens and code given for its own words and names. If anything shown to a person states it, don't say so.
 - Never judge how anything looks or how it is worded: no taste, tone, colour or layout. Nothing about what users do or feel, how many, or how often: nobody real was watched.
 - title: what a person hits, in one plain sentence, under 90 characters. fix: what to change, in one plain sentence a developer can act on. No links, commands or code in either.
 - Report at most ${MOST_ASKED}, the ones that stop the main journey first. If nothing clearly qualifies, return an empty list: a wrong item is much worse than none.`;
@@ -334,6 +335,40 @@ const WAITS_ON_A_PERSON = /\b(?:yet|haven't|hasn't|get started|your first|start 
 /** Saying there's no way anywhere, in whichever words: nothing a screen with a link on it can be. */
 const SAYS_NO_WAY = /\bno (?:\w+ )?(?:way|link|route|path|button|control)s?\b.{0,30}\b(?:back|on|onward|forward|out|elsewhere|anywhere|else)\b|\bnowhere to go\b|\bcan't get back\b|\bstranded\b/i;
 
+/** Saying a person isn't told, in so many words: "with no warning", "silently", "never says". Not "hidden": a hidden setting is another claim. */
+const SAYS_UNTOLD = /\b(?:no|without(?: a| any)?) warning\b|\bsilent(?:ly)?\b|\bwithout (?:telling|saying|notice)\b|\bnever (?:told|tells?|says?)\b|\b(?:doesn't|does not|don't|do not) (?:say|tell)\b/i;
+/** The name of a limit in code: FREE_IMPORT_LIMIT, maxRows, monthlyQuota. */
+const LIMIT_NAME = /\b[\w$]*(?:Limit|LIMIT|Quota|QUOTA|Max|MAX)[\w$]*\b|\b(?:limit|quota|max)[A-Z_][\w$]*\b/g;
+/** Files that draw what a person sees. */
+const UI_FILE = /\.(?:tsx|jsx|vue|svelte|astro|html|erb|hbs)$/i;
+
+/**
+ * Whether a name is drawn where it's used: in a {…} among a tag's children, or in a string with words
+ * around it. A prop (limit={MAX_ROWS}) or an import only hands it on.
+ */
+function drawnIn(text: string, name: string): boolean {
+  const n = `(?<![\\w$])${name.replace(/\$/g, "\\$")}(?![\\w$])`;
+  const words = "[A-Za-z]+ [A-Za-z]+";
+  return [
+    // After a tag's ">" (not an arrow's), with only words between, or first on its line: a child.
+    `(?:(?<!=)>[^<>{}()=;\\n]*|^\\s*)\\{[^{}\\n]*${n}`,
+    // A template string with words in it.
+    `\`[^\`]*${words}[^\`]*\\$\\{[^}\`]*${n}`,
+    `\\$\\{[^}\`]*${n}[^}\`]*\\}[^\`]*${words}[^\`]*\``,
+    // Words in quotes added to it.
+    `["'][^"'\\n]*${words}[^"'\\n]*["']\\s*\\+[^;\\n]*${n}`,
+    `${n}[^;\\n]*\\+\\s*["'][^"'\\n]*${words}`,
+  ].some((pattern) => new RegExp(pattern, "m").test(text));
+}
+
+/** Whether a limit a cited line names is also drawn by code for a screen, other than that line's file: then it's told somewhere. */
+function limitShown(code: readonly { file: string; quote: string }[], repo: CheckFacts["repo"]): boolean {
+  const names = new Set(code.flatMap((c) => c.quote.match(LIMIT_NAME) ?? []).filter((name) => name.length >= 6));
+  if (!names.size || !repo) return false;
+  const cited = new Set(code.map((c) => c.file));
+  return repo.files.some((f) => UI_FILE.test(f.path) && !cited.has(f.path) && [...names].some((name) => drawnIn(f.text, name)));
+}
+
 /** A control that takes a person somewhere: the navigation counts, as nobody's stuck on a screen with a menu. */
 const hasWayOn = (r: ScreenReview) => r.controls.some((c) => (c.kind === "button" || c.kind === "link" || c.kind === "tab" || c.kind === "menu") && !c.states?.includes("disabled"));
 
@@ -408,6 +443,7 @@ export function checkItem(raw: unknown, facts: CheckFacts): CheckedItem | string
   const structure = structureSays(item.problem, shown.review, quotes, facts);
   if (structure) return structure;
   if (SAYS_NO_WAY.test(title) && hasWayOn(shown.review)) return "that screen has a way on";
+  if (SAYS_UNTOLD.test(`${title} ${fix}`) && limitShown(code, facts.repo)) return "the screens' code tells it";
   return { problem: item.problem, screen: shown.review.path, review: shown.review, title, fix, quotes, code };
 }
 
@@ -870,7 +906,7 @@ export function liveItems(show: (item: MeasuredItem) => void): (checks: readonly
 
 const FINDING_FIX: Record<Finding["kind"], (g: IssueGroup) => string> = {
   // Fixed words: a label is the site's text, and a sentence telling an agent to carry it out would undo the quotes around it.
-  does_nothing: () => "Wire this button to the action the product intends, or remove it: pressing it changed nothing and sent nothing.",
+  does_nothing: () => "Wire this button to the action the product intends, or remove it: nothing changed on screen and nothing was sent within 2 seconds of the press.",
   crashes: () => "Fix this script error: it was thrown while the browser used the page.",
   request_fails: () => "Fix what answers this request, or what sends it.",
   // A link whose page answers 5xx points at a page that's there: the server behind it is what fails.

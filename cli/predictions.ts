@@ -121,7 +121,9 @@ function named(map: Learned, path: string): string {
  *   link to another host (the common split: app.example.com/login linking "Sign up free" to
  *   www.example.com/signup);
  * - something public was reachable besides the way in. A site that is nothing but a sign-in door
- *   is a company's own tool or a business product, whose accounts are handed out, not signed up for.
+ *   is a company's own tool or a business product, whose accounts are handed out, not signed up for;
+ * - most screens weren't open without a session, where a stand-in pass ran to tell. Where they
+ *   were, the app is public: newcomers use it without an account.
  */
 function signInFirst(map: Learned, seen: Seen): Prediction | undefined {
   if (map.learner?.stoppedBy !== "complete") return undefined;
@@ -137,6 +139,10 @@ function signInFirst(map: Learned, seen: Seen): Prediction | undefined {
   const signIn = (s: { path: string; title?: string | null }) => SIGN_IN_PATH.test(s.path) || SIGN_IN_TITLE.test(s.title ?? "");
   if (!start || !signIn(start)) return undefined;
   if (map.screens.every((s) => signIn(s) || ACCOUNT_DOOR.test(s.path))) return undefined;
+  // Only a stand-in pass tells open screens from the product behind the sign-in: without one, every screen seen was open.
+  const passRan = map.screens.some((s) => s.seenWith) || map.learner?.standIn?.status === "reached" || map.learner?.standIn?.status === "no_adapter";
+  const open = map.screens.filter((s) => !s.seenWith && !signIn(s) && !ACCOUNT_DOOR.test(s.path));
+  if (passRan && open.length * 2 > map.screens.length) return undefined;
   const words = [
     ...map.screens.flatMap((s) => [s.path, s.title ?? "", ...s.headings]),
     ...Object.values(seen.controls ?? {}).flatMap((c) => [...c.buttons, ...c.links]),

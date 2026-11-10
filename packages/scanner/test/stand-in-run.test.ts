@@ -344,7 +344,7 @@ describe("when no one can stand in", () => {
     const app = await standInApp();
     try {
       const result = await scanSite({ startUrl: app.url, ...quick, screenshots: false, learnActions: false, standIn: { provider: "acme-auth" } });
-      expect(result.standIn?.status).toBe("no_adapter");
+      expect(result.standIn?.status).toBe("unknown_provider");
     } finally {
       await app.close();
     }

@@ -36,9 +36,12 @@ export type { JourneyHints, JourneyOutcome, JourneyReport, JourneyStep, StepsToV
  *   a read by anyone outside the server. This is why a signed-in run belongs on a test account.
  * - Links are followed. Buttons that only move between screens are pressed, to
  *   find screens with no link to them (most single-page apps); anything that
- *   could act (delete, pay, send, sign out, submit a form, sign in elsewhere) is
- *   never pressed, and any write it tried would be blocked anyway. Links that say they act and
- *   other origins are never visited (see linksHeldBack); one page per URL pattern. A start
+ *   could act (delete, pay, upgrade, sign out, submit a form, sign in elsewhere) is
+ *   not, and any write it tried would be blocked anyway. Learning presses some of these (see
+ *   RISKY_WHEN_LEARNING), never paying, upgrading, signing out or signing in elsewhere. After a
+ *   press that says it acts (deletes, sends: "Email everyone"), everything is held, reads too
+ *   (see saysActs); with realWrites (--create), only after one that says it destroys, so a send
+ *   goes through. Links that say they act and other origins are never visited (see linksHeldBack); one page per URL pattern. A start
  *   that names a folder (/examples/react/) keeps the learner inside that folder.
  * - Page structure (forms, required fields, buttons: labels only) is read by the
  *   real snippet running in the scan's browser, so a scan learns exactly what
@@ -389,14 +392,16 @@ const MAX_ROUTE_KEYS = 4;
  * what's left to avoid is what acts without one: ending the session, leaving for
  * another sign-in or payment page, deleting, downloading. Form submits are never pressed.
  */
-export const RISKY_BUTTON = /delete|remove|destroy|erase|trash|purge|wipe|discard|archive|\bclear\b|\bempty\b|truncate|\bdrop\b|log ?out|sign ?out|unsubscribe|revoke|deactivate|close account|pay\b|buy|purchase|checkout|billing portal|continue with|google|apple|microsoft|github|download|print|export|löschen|entfernen|abmelden|ausloggen|kündigen|bezahlen|kaufen|zur kasse|drucken|herunterladen|exportieren|supprimer|déconnexion|se déconnecter|payer|acheter|imprimer|eliminar|borrar|cerrar sesión|pagar|comprar|imprimir|elimina|\besci\b|acquista|verwijderen|uitloggen|afrekenen|excluir|\bsair\b/i;
+export const RISKY_BUTTON = /delete|remove|destroy|erase|trash|purge|wipe|discard|archive|\bclear\b|\bempty\b|truncate|\bdrop\b|log ?out|sign ?out|unsubscribe|revoke|deactivate|close account|pay\b|buy|purchase|checkout|billing portal|\bupgrade|subscribe (?:to|for) (?:the )?(?:pro|team|premium|plus|business|enterprise)\b|start (?:a |my |your )?(?:free )?trial|continue with|google|apple|microsoft|github|download|print|export|löschen|entfernen|abmelden|ausloggen|kündigen|bezahlen|kaufen|zur kasse|drucken|herunterladen|exportieren|supprimer|déconnexion|se déconnecter|payer|acheter|imprimer|eliminar|borrar|cerrar sesión|pagar|comprar|imprimir|elimina|\besci\b|acquista|verwijderen|uitloggen|afrekenen|excluir|\bsair\b/i;
 /**
  * When learning, every write is answered by us and never reaches the site, and everything after a
  * press that says it destroys is held (see heldUntil), so a button that deletes or exports is safe to
  * press: it's what we need to learn. What stays off-limits is what acts outside our reach: ending
- * the session, leaving for payment or another sign-in, printing.
+ * the session, leaving for payment, a plan or another sign-in, printing. A press that says it sends
+ * ("Email everyone") is made, but what follows it is held, read or not (see saysActs). With
+ * realWrites this isn't used: only a press that says it destroys is held, so a send goes through.
  */
-const RISKY_WHEN_LEARNING = /log ?out|sign ?out|unsubscribe|deactivate|close account|pay\b|buy|purchase|checkout|billing portal|continue with|google|apple|microsoft|github|print|abmelden|ausloggen|kündigen|konto (löschen|schließen)|bezahlen|kaufen|zur kasse|drucken|déconnexion|se déconnecter|payer|acheter|imprimer|cerrar sesión|pagar|comprar|imprimir|\besci\b|acquista|uitloggen|afrekenen|\bsair\b/i;
+export const RISKY_WHEN_LEARNING = /log ?out|sign ?out|unsubscribe|deactivate|close account|pay\b|buy|purchase|checkout|billing portal|\bupgrade|subscribe (?:to|for) (?:the )?(?:pro|team|premium|plus|business|enterprise)\b|start (?:a |my |your )?(?:free )?trial|continue with|google|apple|microsoft|github|print|abmelden|ausloggen|kündigen|konto (löschen|schließen)|bezahlen|kaufen|zur kasse|drucken|déconnexion|se déconnecter|payer|acheter|imprimer|cerrar sesión|pagar|comprar|imprimir|\besci\b|acquista|uitloggen|afrekenen|\bsair\b/i;
 /** A number kept for drama: no phone can ever have it, so it's plainly made up, in the page as here. */
 const FICTIONAL_PHONE = "+447700900123";
 /** A plausible test value for a field, from its type and its name or placeholder. */
@@ -1078,7 +1083,7 @@ async function standInPass(standIn: StandInConfig, config: ScanConfig, result: S
   const wallsBefore = new Set(walls);
   const sealFor = (given: StandInConfig) => new Seal({ start, config: { ...given, proxied: [...(given.proxied ?? []), ...(config.proxied ?? [])] }, publicScreens, opened: walls, background: backgroundHost, graphqlRead: (body, type) => onlyGraphqlReads(body, type), readable: plainRead });
   let seal = sealFor(standIn);
-  if (seal.unknownProvider) return report("no_adapter", `The stand-in user doesn't know the sign-in library "${firstLine(standIn.provider ?? "")}", so only the public pages were learned.`, { notReached: seal.notReached });
+  if (seal.unknownProvider) return report("unknown_provider", `The stand-in user doesn't know the sign-in library "${firstLine(standIn.provider ?? "")}", so only the public pages were learned.`, { notReached: seal.notReached });
   const serverSays = (path: string | undefined) => report("server_auth", path ? `The server decides what ${path} shows, so a stand-in user in the browser can't reach it. Only the public pages were learned.` : STAND_IN_MESSAGES.server, { notReached: seal.notReached });
   /** Whether the server stands in the way of this seal's addresses, leaving out those already read. */
   const serverStops = async (known: ReadonlySet<string>): Promise<StandInReport | undefined> => {
@@ -4664,6 +4669,14 @@ const OBJECT_VERBS = new Set("reset clear empty truncate drop".split(" "));
 const DESTROY_WORDS = new Set("delete deletion remove removal destroy erase purge wipe trash discard unsubscribe deactivate revoke archive clear empty truncate drop löschen loeschen entfernen supprimer eliminar borrar elimina verwijderen excluir".split(" "));
 /** The same said by a control's code: an icon's class, a button's id. Words like "clear" and "drop" are layout there. */
 const MARK_WORDS = new Set("delete remove destroy erase trash bin danger destructive".split(" "));
+/** A control's first word that says it sends something out of the app, whatever follows: "Remind them". */
+const SEND_WORDS = new Set("notify remind reinvite".split(" "));
+/**
+ * A first word that sends only when the rest says to whom or what goes out ("Email everyone", "Send
+ * reminders"): alone it's a tab, a single invite or a form's own button ("Send", "Send report").
+ */
+const MAIL_WORDS = new Set("send resend email invite message".split(" "));
+const RECIPIENTS = new Set("everyone everybody all members users customers team them clients subscribers reminder reminders invite invites invitation invitations newsletter campaign blast broadcast".split(" "));
 /** Words before the verb that change nothing ("Yes, delete it"). */
 const POLITE = new Set("yes ok okay please really permanently".split(" "));
 /** "Close" alone is a pop-up's way out: only these say it of an account, whole, in a control's words or a part of an address. */
@@ -4787,9 +4800,15 @@ export function controlDestroys(says: Saying): boolean {
   return saysDestroys(`${says.text} ${says.around}`) || wordsIn(says.marks).some((w) => MARK_WORDS.has(w));
 }
 
-/** Whether a control says it does something a read mustn't: destroys, signs out, or commands. */
+/** Whether a control says it does something a read mustn't: destroys, signs out, sends, or commands. */
 export function saysActs(says: Saying): boolean {
-  return labelVerb(says.text) !== undefined || controlDestroys(says);
+  return labelVerb(says.text) !== undefined || controlDestroys(says) || saysSends(says.text);
+}
+
+/** Whether a control's words say it sends: a sending verb first, or mail and who it goes to (see SEND_WORDS). */
+function saysSends(text: string): boolean {
+  const [first = "", ...rest] = wordsIn(text).join(" ").replace(/\be mail\b/g, "email").split(" ").filter((w) => !POLITE.has(w));
+  return SEND_WORDS.has(first) || (MAIL_WORDS.has(first) && rest.some((w) => RECIPIENTS.has(w)));
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backgroundHost, carriesTyped, commandIn, firstLine, judge, linkActs, pressAdds, saysActs, saysDestroys, socketUpkeep, withoutTokens, type Guard, type Outgoing } from "../src/scan.ts";
+import { backgroundHost, carriesTyped, commandIn, firstLine, judge, linkActs, pressAdds, RISKY_BUTTON, RISKY_WHEN_LEARNING, saysActs, saysDestroys, socketUpkeep, withoutTokens, type Guard, type Outgoing } from "../src/scan.ts";
 
 /** The allow rule on its own, without a browser: what it lets through and what it holds back. */
 const url = (path: string) => new URL(path, "https://app.test");
@@ -57,6 +57,26 @@ describe("closing an account", () => {
       expect(saysActs(saying(text)), text).toBe(false);
     }
     expect(saysActs(saying("Close my account"))).toBe(true);
+  });
+});
+
+describe("presses that leave for a plan or send something out", () => {
+  it("never presses an upgrade, a paid plan or a trial, learning or not; a newsletter's Subscribe is pressed", () => {
+    for (const text of ["Upgrade now", "Upgrade to Pro", "Subscribe to Team", "Subscribe to the Pro plan", "Start free trial", "Start your free trial", "Start a trial"]) {
+      expect(RISKY_WHEN_LEARNING.test(text), text).toBe(true);
+      expect(RISKY_BUTTON.test(text), text).toBe(true);
+    }
+    for (const text of ["Send", "Send feedback", "Invite member", "Downgraded items", "Subscribe", "Subscribe to our newsletter", "Subscribers", "Trial results", "Start"]) expect(RISKY_WHEN_LEARNING.test(text), text).toBe(false);
+  });
+
+  it("holds what follows a press that says it sends, and not one that only names mail", () => {
+    for (const text of ["Email everyone", "Send reminder", "Resend invite", "Notify the team", "Invite all", "Yes, send to everyone", "e-mail all members", "Remind them", "Send newsletter"]) expect(saysActs(saying(text)), text).toBe(true);
+    for (const text of ["Emails", "Sent items", "Inbox", "Invites", "Notifications", "Reminders"]) expect(saysActs(saying(text)), text).toBe(false);
+  });
+
+  it("doesn't hold for a tab, a single invite or a form's own Send", () => {
+    for (const text of ["Email", "Invite member", "Invite", "Message", "Email settings", "Invite a teammate", "Send", "Send report", "Send message"]) expect(saysActs(saying(text)), text).toBe(false);
+    for (const text of ["Invite your team", "Message all users", "Email customers"]) expect(saysActs(saying(text)), text).toBe(true);
   });
 });
 

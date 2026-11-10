@@ -4,6 +4,17 @@ What changed in each release, for the people running it. Versions follow [semant
 
 ## Unreleased
 
+## 0.1.2 - 2026-11-10
+
+- **Always on your plan.** With `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` exported, Claude Code and Codex used to bill that key while the run said it was on your plan. The key isn't passed to them now (an LLM gateway, Bedrock or Vertex keeps its settings). To use a key, pass `--ai anthropic` or `--ai openai`.
+- **One Ctrl-C under `npx` saves what it learned.** npm passes the signal on a second time, which quit at once with nothing written. A second press within half a second counts as the same one.
+- **An AI that isn't installed is said up front.** `--ai claude-code` or `--ai codex` without the command on your PATH stops before the run, with how to fix it, instead of failing later with Node's own error.
+- **Buttons that upgrade, subscribe to a paid plan or start a trial are never pressed.** One that sends to many people ("Email everyone", "Send reminder") holds everything after it, reads too.
+- **No sign-up, no warning.** On an app with no way to make an account, the new-user step says so instead of "not walked", and the "no way to sign up" prediction no longer fires on an app whose screens are mostly open.
+- **Fewer confident wrong predictions.** It won't say a limit comes "with no warning" when a screen's code shows it.
+- **Clearer output.** "Not found" names what to search the code for; lists that are cut end with how many more; PRODUCT.md's fix list numbers a gap as FIX.md does; report.html names photos from its own folder; outside a git repository it says why there's no file:line.
+- **One-word hosts work**, such as `http://web:3000` in Docker Compose or CI.
+
 ## 0.1.1 - 2026-11-10
 
 - **Codex says why it failed.** A failure no longer always says "run codex login": that hint came from Codex repeating the question, which talks about sign-ins. Codex's own error is shown instead, and a model your plan can't use says so and to pass `--model`.

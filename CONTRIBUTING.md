@@ -60,7 +60,7 @@ The vitest projects are named after their folders in `packages/`. The `scanner` 
 | `cli/build.mjs` | Bundles the CLI with esbuild for npm |
 | `action/` | The GitHub Action: learns before and after, keeps one comment on the pull request |
 | `packages/scanner/src/scan.ts` | The learner: drives the browser, stops every save, presses buttons, fills forms, photographs screens, records issues |
-| `packages/understanding/` | The parts of the hosted product's understanding the CLI uses: the site learner (`src/learn/`), features and the AI reading (`src/features/`) |
+| `packages/understanding/` | The understanding the CLI uses: the site learner (`src/learn/`), features and the AI reading (`src/features/`) |
 | `packages/snippet/` | The browser snippet: reads page structure, normalises addresses and redacts values. The learner runs the real one. |
 | `packages/schemas/`, `packages/rules-core/` | Shared contracts for what the snippet records |
 | `examples/` | The invoice app with a run's output, and the Action's workflow |
@@ -121,7 +121,7 @@ Keep them small and say what changed for the person running it. `npm run check` 
 
 ## Releases
 
-A maintainer releases by moving the `## Unreleased` notes under a new `## x.y.z - <date>` heading in `CHANGELOG.md`, setting `action/version.txt` to the same version, and pushing a `vx.y.z` tag. The release workflow checks the tag against both, builds and packs that version, tries the packed package on the example app, publishes it to npm with Trusted Publishing, makes the GitHub release from the CHANGELOG section, and moves the Action's tag. While it is 0.x that tag follows the minor (`v0.1` moves to 0.1.1, 0.1.2…; 0.2.0 starts `v0.2` and leaves `v0.1` alone), from 1.0.0 the major (`v1`); it only ever moves forward, and a pre-release moves none.
+A maintainer releases by moving the `## Unreleased` notes under a new `## x.y.z - <date>` heading in `CHANGELOG.md`, setting `action/version.txt` to the same version, and pushing a `vx.y.z` tag. The release workflow checks the tag against both, builds and packs that version, tries the packed package on the example app, publishes it to npm with Trusted Publishing (the npm package's trusted publisher must be set to this repository's `release.yml`), makes the GitHub release from the CHANGELOG section, and moves the Action's tag. While it is 0.x that tag follows the minor (`v0.1` moves to 0.1.1, 0.1.2…; 0.2.0 starts `v0.2` and leaves `v0.1` alone), from 1.0.0 the major (`v1`); it only ever moves forward, and a pre-release moves none.
 
 ## License
 

@@ -1,45 +1,29 @@
 {
   "schemaVersion": "map-1",
   "url": "http://localhost:3000/",
-  "learnedAt": "2026-11-10T10:46:02.817Z",
-  "product": "Invoice Demo is for people who bill clients: it keeps a client list, creates and sends invoices, exports reports as CSV, and connects online payment.",
+  "learnedAt": "2026-11-10T18:24:45.443Z",
+  "product": "An invoicing app for small businesses to manage clients, create and send invoices, export reports, and connect online payments. It is used by freelancers and small business owners who bill their clients.",
   "mainAction": {
     "id": "invoice.create",
     "label": "Save invoice",
-    "reason": "the AI's reading of the product: The product is named and built around invoices, and creating one is what a customer comes to do before sending it.",
+    "reason": "the AI's reading of the product: The product promises invoicing, and creating an invoice is the thing customers come to make, which sending then follows.",
     "source": "ai"
   },
   "setupSteps": [
     {
       "action": "invoice.create",
       "requires": "client.create",
-      "why": "The invoice form asks for a Client, so a client needs to be saved before an invoice can be created for it.",
+      "why": "An invoice is made out to a client, and the Client field draws on saved clients.",
+      "source": "ai"
+    },
+    {
+      "action": "invoice.send",
+      "requires": "invoice.create",
+      "why": "An invoice must be saved before it can be opened and sent.",
       "source": "ai"
     }
   ],
-  "journeys": [
-    {
-      "name": "Add a client",
-      "screens": [
-        "/dashboard",
-        "/clients/new"
-      ]
-    },
-    {
-      "name": "Create an invoice",
-      "screens": [
-        "/dashboard",
-        "/invoices/new"
-      ]
-    },
-    {
-      "name": "Connect online payments",
-      "screens": [
-        "/dashboard",
-        "/settings/payments"
-      ]
-    }
-  ],
+  "journeys": [],
   "screens": [
     {
       "path": "/dashboard",
@@ -102,7 +86,7 @@
     {
       "id": "client.create",
       "name": "Save client",
-      "does": "Stores a new client with its name, email, billing address and VAT number so it can be picked on an invoice.",
+      "does": "Stores a new client with its name, email, billing address and VAT number so invoices can be made out to them.",
       "onScreen": "Save client",
       "kind": "save",
       "request": "POST /api/clients",
@@ -113,7 +97,7 @@
     {
       "id": "invoice.create",
       "name": "Save invoice",
-      "does": "Creates an invoice for a chosen client with an amount and registration number.",
+      "does": "Creates a new invoice for a chosen client with an amount and reference number.",
       "onScreen": "Save invoice",
       "kind": "save",
       "request": "POST /api/invoices",
@@ -124,7 +108,7 @@
     {
       "id": "payment.connect",
       "name": "Connect payments",
-      "does": "Links a payment account so that invoices can be paid online.",
+      "does": "Connects a payment account so clients can pay invoices online.",
       "onScreen": "Connect payments",
       "kind": "save",
       "request": "POST /api/payments/connect",
@@ -135,7 +119,7 @@
     {
       "id": "report.export",
       "name": "Export CSV",
-      "does": "Exports the report data as a CSV file.",
+      "does": "Exports report data as a CSV file.",
       "onScreen": "Export CSV",
       "kind": "save",
       "request": "POST /api/reports/export",
@@ -146,7 +130,7 @@
     {
       "id": "invoice.send",
       "name": "Send invoice",
-      "does": "Sends an existing invoice to the client.",
+      "does": "Sends an existing invoice out to the client.",
       "onScreen": "Send invoice",
       "kind": "save",
       "request": "POST /api/invoices/:id/send",
@@ -164,27 +148,14 @@
       "count": 1
     }
   ],
-  "predictions": [
-    {
-      "kind": "sign_in_first",
-      "screen": "/",
-      "target": "Welcome back",
-      "why": "The first screen asks people to sign in, and it saw no way to sign up or make an account, so someone new may have no way in."
-    },
-    {
-      "kind": "needs_setup_first",
-      "screen": "/invoices/new",
-      "target": "Save invoice",
-      "why": "\"Save invoice\" needs \"Save client\" done first (the invoice form asks for a Client, so a client needs to be saved before an invoice can be created for it), but the journey \"Create an invoice\" never passes New client, so people following it may get there too soon."
-    }
-  ],
+  "predictions": [],
   "learner": {
     "visited": 7,
     "stoppedBy": "complete",
     "savesStopped": 6,
     "sentByPage": 0,
     "savesWentThrough": false,
-    "seconds": 52,
+    "seconds": 48,
     "errors": [],
     "stoppedFrom": {
       "listed": 5,
@@ -205,53 +176,54 @@
       "stoppedBy": "complete"
     },
     "wallOffer": "add-code",
+    "aiFlag": "claude-code",
     "measured": 7,
     "timing": {
       "stages": {
-        "sign-in known": 6924,
-        "first item": 34340,
-        "browser ends": 39292,
-        "reading ends": 51684,
-        "review ends": 51684,
-        "last look ends": 51684
+        "sign-in known": 6966,
+        "first item": 34369,
+        "browser ends": 39320,
+        "reading ends": 45396,
+        "review ends": 48073,
+        "last look ends": 48073
       },
       "scan": {
-        "load": 3717,
-        "read": 826,
-        "photo": 101,
-        "checks": 1601,
-        "forms": 13632,
-        "commands": 3499,
-        "buttons": 13013,
-        "public pass": 39184
+        "load": 3734,
+        "read": 830,
+        "photo": 104,
+        "checks": 1600,
+        "forms": 13641,
+        "commands": 3503,
+        "buttons": 12980,
+        "public pass": 39209
       },
       "asks": [
-        {
-          "what": "You review a web product the way a person trying",
-          "model": "claude-opus-5-5",
-          "chars": 4648,
-          "ms": 7786,
-          "at": 39312,
-          "part": "review",
-          "tokens": {
-            "input": 2,
-            "cacheRead": 1589,
-            "cacheWrite": 1450,
-            "output": 624
-          }
-        },
         {
           "what": "You are a product analyst. You are given the fea",
           "model": "claude-haiku-5-5",
           "chars": 8333,
-          "ms": 12359,
-          "at": 39322,
+          "ms": 6044,
+          "at": 39349,
           "part": "review",
           "tokens": {
             "input": 2,
-            "cacheRead": 1200,
-            "cacheWrite": 3664,
-            "output": 2482
+            "cacheRead": 4864,
+            "cacheWrite": 0,
+            "output": 1263
+          }
+        },
+        {
+          "what": "You review a web product the way a person trying",
+          "model": "claude-opus-5-5",
+          "chars": 4848,
+          "ms": 8734,
+          "at": 39339,
+          "part": "review",
+          "tokens": {
+            "input": 2,
+            "cacheRead": 3097,
+            "cacheWrite": 0,
+            "output": 787
           }
         }
       ]
@@ -259,12 +231,12 @@
     "ai": {
       "via": "your Claude Code sign-in",
       "asks": 2,
-      "tokens": 11013,
+      "tokens": 10015,
       "input": 4,
-      "cacheRead": 2789,
-      "cacheWrite": 5114,
-      "output": 3106,
-      "cached": 35,
+      "cacheRead": 7961,
+      "cacheWrite": 0,
+      "output": 2050,
+      "cached": 100,
       "model": "claude-haiku-5-5",
       "models": [
         "claude-haiku-5-5",
@@ -274,10 +246,10 @@
     "review": {
       "ran": true,
       "screens": 7,
-      "raised": 1,
-      "kept": 1,
+      "raised": 0,
+      "kept": 0,
       "dropped": {},
-      "seconds": 8
+      "seconds": 9
     }
   },
   "fixes": [
@@ -294,40 +266,13 @@
       "evidence": [
         "nothing changed on screen, and no request, navigation or dialog followed"
       ],
-      "fix": "Wire this button to the action the product intends, or remove it: pressing it changed nothing and sent nothing.",
+      "fix": "Wire this button to the action the product intends, or remove it: nothing changed on screen and nothing was sent within 2 seconds of the press.",
       "where": {
         "file": "index.html",
         "line": 73,
         "code": "html: `<h1>Dashboard</h1><div class=\"card\"><p>Create an invoice and send it to get paid.</p><button class=\"primary\" id=\"new\">New invoice</button><button id=\"import\">Import invoices</button></div>`,"
       },
       "photo": "screens/dashboard.jpg"
-    },
-    {
-      "id": "wait_for_value-7d3295f8dc",
-      "status": "predicted",
-      "from": "review",
-      "kind": "wait_for_value",
-      "title": "Every field, VAT number included, must be filled in before a first client can be saved.",
-      "screen": "/clients/new",
-      "screens": [
-        "/clients/new"
-      ],
-      "evidence": [
-        "On /clients/new: \"VAT number\""
-      ],
-      "quotes": [
-        {
-          "screen": "/clients/new",
-          "words": "VAT number"
-        }
-      ],
-      "fix": "Make VAT number and billing address optional on the new client form so a person can save a client with just a name and email and go straight to their first invoice.",
-      "where": {
-        "file": "index.html",
-        "line": 86,
-        "code": "<label>VAT number <input name=\"vat\" required></label>"
-      },
-      "photo": "screens/clients_new-2727df.jpg"
     }
   ],
   "newUser": {

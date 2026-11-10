@@ -464,12 +464,18 @@ const CREDENTIAL = /(TOKEN|SECRET|KEY|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|AUTH|CO
 /** What each agent needs to sign in, which a credential filter would otherwise take away. */
 const AGENT_NEEDS: Record<"claude" | "codex", (name: string, env: NodeJS.ProcessEnv) => boolean> = {
   claude: (name, env) =>
-    /^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$)/.test(name) ||
+    // Never an Anthropic API key or token: Claude Code would bill it, and the run is on the person's plan.
+    // Except where it signs in elsewhere with them: a cloud, or a gateway at ANTHROPIC_BASE_URL.
+    (/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_CONFIG_DIR$)/.test(name) && (!/^ANTHROPIC_(API_KEY|AUTH_TOKEN)$/.test(name) || onCloud(env) || Boolean(env.ANTHROPIC_BASE_URL))) ||
     // Claude Code through Amazon Bedrock or Google Vertex signs in with those clouds' own credentials.
     (Boolean(env.CLAUDE_CODE_USE_BEDROCK) && /^AWS_/.test(name)) ||
     (Boolean(env.CLAUDE_CODE_USE_VERTEX) && /^(GOOGLE_APPLICATION_CREDENTIALS|CLOUD_ML_REGION|ANTHROPIC_VERTEX_)/.test(name)),
-  codex: (name) => /^(OPENAI_API_KEY|OPENAI_BASE_URL|OPENAI_ORG_ID|OPENAI_PROJECT_ID|CODEX_[A-Z_]*|AZURE_OPENAI_API_KEY)$/.test(name),
+  // Never an API key either: Codex would bill it, and the run is on the person's ChatGPT plan.
+  codex: (name) => /^(OPENAI_BASE_URL|OPENAI_ORG_ID|OPENAI_PROJECT_ID|CODEX_[A-Z_]*)$/.test(name) && name !== "CODEX_API_KEY",
 };
+
+/** Claude Code through Amazon Bedrock or Google Vertex: billed by that cloud, with its settings kept as they are. */
+const onCloud = (env: NodeJS.ProcessEnv) => Boolean(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX);
 
 /** This process's environment for an agent: without any credential it doesn't need to sign in. */
 export function agentEnv(agent: "claude" | "codex", env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
@@ -479,7 +485,7 @@ export function agentEnv(agent: "claude" | "codex", env: NodeJS.ProcessEnv = pro
 /** What to do when an agent says it isn't signed in. */
 const SIGN_IN = /not (logged|signed) in|log ?in|sign ?in|unauthori[sz]ed|authenticat|credential|api key|401/i;
 const SIGN_IN_HINT: Record<"claude" | "codex", string> = {
-  claude: "run claude and sign in, or set ANTHROPIC_API_KEY",
+  claude: "run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY",
   codex: "run codex login",
 };
 
@@ -552,6 +558,12 @@ export function failure(command: "claude" | "codex", code: number | null, err: s
   return `${command}: ${said.slice(0, 200)}${SIGN_IN.test(`${err}\n${out}`) ? ` (${SIGN_IN_HINT[command]})` : ""}`;
 }
 
+/** Said when the agent's command can't be found, in place of Node's "spawn claude ENOENT". */
+export function commandMissing(command: "claude" | "codex"): string {
+  const setUp = command === "claude" ? "install Claude Code and sign in" : "install Codex and run codex login";
+  return `the ${command} command isn't installed or isn't on your PATH: ${setUp}, or use --ai none`;
+}
+
 /**
  * A command run with its question on stdin, in `cwd`, with only the environment it is given; its
  * output and stderr, or its own words when it fails or takes too long (see failure).
@@ -570,9 +582,9 @@ function run(command: "claude" | "codex", env: NodeJS.ProcessEnv, args: string[]
     child.stderr.on("data", (d) => (err += d));
     // A command that exits before reading its question: the exit below says why, not a broken pipe.
     child.stdin.on("error", () => {});
-    child.on("error", (error) => {
+    child.on("error", (error: NodeJS.ErrnoException) => {
       clearTimeout(timer);
-      reject(error);
+      reject(error.code === "ENOENT" ? new Error(commandMissing(command)) : error);
     });
     child.on("close", (code) => {
       clearTimeout(timer);

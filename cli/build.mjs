@@ -122,7 +122,7 @@ async function main() {
   writeFileSync(`${out}/package.json`, `${JSON.stringify({
     name: values.name,
     version: values.version,
-    description: "Learns a web product from the outside and writes down what it understood: screens, actions, journeys, and provable issues (buttons that do nothing, script errors, failed requests, broken links), plus what a pull request changes.",
+    description: "Learns your web app like a new user, then hands your coding agent a fix list with file:line. Bring your own AI.",
     license: "Apache-2.0",
     author: "Hugh Hellings",
     type: "module",

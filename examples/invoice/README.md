@@ -1,20 +1,20 @@
 # Invoice Demo
 
-A small invoicing app to try Context Machines on, and what one run of it wrote. It's a single-page app, the way most products are built, with no dependencies, and it has the kinds of problems real products ship with: an "Import invoices" button that does nothing, a required "Reg. no." field nothing explains, and a "Send invoice" that fails until payments are connected.
+A small invoicing app to try Context Machines on, and what one run of it wrote. It's a single-page app, the way most products are built, with no dependencies, and it has a problem planted in it: an "Import invoices" button that does nothing.
 
 ```bash
 node examples/invoice/server.mjs                                  # http://localhost:3000
 npx contextmachines learn http://localhost:3000
 ```
 
-[contextmachines/](contextmachines) is what that run wrote, with an Anthropic API key for the AI reading:
+[contextmachines/](contextmachines) is what that run wrote, with a Claude Code sign-in for the AI reading. Yours uses whichever AI init set up (a Claude Code or Codex sign-in, an API key, or none). It wrote:
 
 - [FIX.md](contextmachines/FIX.md): what to fix, with its evidence, where to change it, and what to do
 - [PRODUCT.md](contextmachines/PRODUCT.md): what it's for, the main action, setup steps, journeys, every screen and action, and the one issue it could prove ("Import invoices" does nothing when pressed)
 - [map.json](contextmachines/map.json): the same, as data
 - [screens/](contextmachines/screens): a photo of each screen
 
-It found the dead button because pressing it changed nothing and sent nothing. It didn't report the other two, on purpose: a field people don't understand and a setup step they miss show in how real people use the product, not in anything the browser can prove went wrong.
+It proves the dead button with no AI: pressing it changed nothing and sent nothing. The predicted items come from the AI's reading, so what it predicts may vary a little from run to run, and yours may not match the files here exactly.
 
 ![The dashboard, as the run photographed it](contextmachines/screens/dashboard.jpg)
 

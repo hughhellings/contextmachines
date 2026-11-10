@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { JOURNEY_LEGEND, type Finding, type WalkedJourney } from "@contextmachines/scanner";
-import { fixDoc, goneSince, type Fix, type JourneyWalkMap } from "./report.ts";
+import { allOpenWords, shortOfWhole, fixDoc, goneSince, searchFor, signUpIn, type Fix, type JourneyWalkMap } from "./report.ts";
 import { agentEnv, aiTotals, connectionReason, pickAi, refusal } from "./ai.ts";
 import { buildFixes } from "./brief.ts";
 import { describeWith } from "../packages/understanding/src/features/describe.ts";
@@ -52,9 +52,19 @@ describe("startUrl", () => {
     // A name that merely starts with "localhost" is someone's site.
     assert.equal(startUrl("localhost.example.com")?.protocol, "https:");
   });
+  it("takes a one-word host when a scheme or a port says it is one (a docker-compose or CI service)", () => {
+    assert.equal(startUrl("http://web:3000")?.href, "http://web:3000/");
+    assert.equal(startUrl("https://app")?.href, "https://app/");
+    assert.equal(startUrl("web:3000")?.href, "http://web:3000/");
+    assert.equal(startUrl("web:80")?.href, "http://web/", "a port that's the scheme's own is still a port given");
+    assert.equal(startUrl("web:443/app")?.href, "http://web:443/app");
+    assert.equal(startUrl("https://web:443")?.href, "https://web/");
+  });
   it("refuses what isn't an address", () => {
     assert.equal(startUrl("not a site"), undefined);
-    assert.equal(startUrl("intranet"), undefined);
+    assert.equal(startUrl("intranet"), undefined, "one word alone is more likely a mistyped command");
+    assert.equal(startUrl("http://not a site"), undefined);
+    assert.equal(startUrl("http://web_app:3000"), undefined);
   });
 });
 
@@ -1308,8 +1318,9 @@ describe("deadStart, with nothing visited", () => {
 describe("the coding agents' environment", () => {
   const env = { PATH: "/bin", HOME: "/home/me", GITHUB_TOKEN: "g", GH_TOKEN: "g", NPM_TOKEN: "n", ACTIONS_RUNTIME_TOKEN: "a", AWS_SECRET_ACCESS_KEY: "s", DATABASE_PASSWORD: "p", ANTHROPIC_API_KEY: "k", CLAUDE_CODE_OAUTH_TOKEN: "o", OPENAI_API_KEY: "ok" };
   it("keeps what each needs to sign in and run, and no other credential", () => {
-    assert.deepEqual(Object.keys(agentEnv("claude", env)).sort(), ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "HOME", "PATH"]);
-    assert.deepEqual(Object.keys(agentEnv("codex", env)).sort(), ["HOME", "OPENAI_API_KEY", "PATH"]);
+    assert.deepEqual(Object.keys(agentEnv("claude", env)).sort(), ["CLAUDE_CODE_OAUTH_TOKEN", "HOME", "PATH"]);
+    assert.deepEqual(Object.keys(agentEnv("codex", env)).sort(), ["HOME", "PATH"]);
+    assert.deepEqual(Object.keys(agentEnv("codex", { ...env, CODEX_API_KEY: "c", CODEX_HOME: "/h", OPENAI_BASE_URL: "u" })).sort(), ["CODEX_HOME", "HOME", "OPENAI_BASE_URL", "PATH"]);
   });
   it("lets Claude Code on Bedrock keep its cloud's credentials", () => {
     assert.ok("AWS_SECRET_ACCESS_KEY" in agentEnv("claude", { ...env, CLAUDE_CODE_USE_BEDROCK: "1" }));
@@ -1942,8 +1953,11 @@ describe("the journeys, in words", () => {
     assert.match(items[6]!, /^- 4 journeys couldn't be followed/);
     assert.equal((section.match(/A person would choose a real file there/g) ?? []).length, 1, "the reason once for all of a kind");
     assert.equal((section.match(/it's that choice that ends, not the journey/g) ?? []).length, 1);
-    // Named 12 to a line at most: 2 of the upgrade's and 1 of the files' left to map.json, counted as journeys.
-    assert.match(section, /- \.\.\.and 3 journeys more in map\.json/);
+    // Named 12 to a line at most: the rest of each line counted at its end, so the names add up to the count before them.
+    assert.match(items[4]!, /"Pro 11" on `\/trades`, and 2 more \(map\.json\)\. /);
+    assert.match(items[5]!, /"Bank 11" on `\/trades`, and 1 more \(map\.json\)\. /);
+    assert.doesNotMatch(items[6]!, /more \(map\.json\)/, "a line with every name says no more");
+    assert.doesNotMatch(section, /journeys more in map\.json/, "each line has counted its own");
     const named = (section.match(/"(Pro|Bank|Lost|Done) \d+"/g) ?? []).length;
     assert.equal(named + 3, 34, "every journey named or counted");
     assert.doesNotMatch(section, /Stopped here/);
@@ -2027,3 +2041,86 @@ describe("what the files say, in plain words", () => {
   });
 });
 
+
+describe("FIX.md, PRODUCT.md and report.html, read by someone new", () => {
+  const at = new URL("http://localhost:3000/");
+  const item = (n: number, more: Partial<Fix> = {}): Fix => ({ id: `x${n}`, status: "proven", from: "check", kind: "cut_off", title: `Label ${n} cut off`, screen: "/a", screens: ["/a"], evidence: ["needs 71px and has 62px"], fix: "Give it room", where: { file: "src/a.ts", line: n }, ...more });
+
+  it("says what to search the code for when no place was found, from the item itself", () => {
+    const dead = item(1, { from: "finding", kind: "does_nothing", title: '"Import invoices" does nothing when pressed', where: undefined });
+    assert.match(fixDoc({ ...base, fixes: [dead] }, at), /^- \*\*Where to change it:\*\* not found: search the code for `Import invoices`\.$/m);
+    assert.match(reportPage({ ...base, fixes: [dead] }, at), /not found: search the code for <\/span><code class="path">Import invoices<\/code>/);
+    assert.equal(searchFor({ title: "Broken link to /pricing" }), "/pricing");
+    assert.equal(searchFor({ title: "Script error: total is not defined" }), "total is not defined");
+    assert.equal(searchFor({ title: "The report asks first", quotes: [{ screen: "/r", words: "Upgrade to Team" }] }), "Upgrade to Team");
+    const bare = fixDoc({ ...base, fixes: [item(1, { title: "Page runs off sideways", where: undefined })] }, at);
+    assert.match(bare, /^- \*\*Where to change it:\*\* not found\.$/m, "nothing to search for: no words promised");
+    assert.doesNotMatch(bare, /words below/);
+  });
+
+  it("numbers PRODUCT.md's Fix first as FIX.md does, with a line where an item is left out", () => {
+    const fixes = [...Array.from({ length: 5 }, (_, n) => item(n + 1)), item(6, { status: "predicted", from: "review", title: "A guess" }), ...Array.from({ length: 4 }, (_, n) => item(n + 7, { status: "predicted", from: "review", title: `Guess ${n + 7}` }))];
+    const doc = productDoc({ ...base, fixes }, [], at);
+    const top = doc.slice(doc.indexOf("## Fix first"), doc.indexOf("](FIX.md)."));
+    assert.match(top, /^4\. \*\*Label 4 cut off\*\*.*\n5\. _in FIX\.md_\n/m);
+    assert.match(top, /^6\. \*\*A guess\*\*/m);
+    assert.match(top, /all 10, 5 not shown here: \[FIX\.md$/);
+    const several = productDoc({ ...base, fixes: [...Array.from({ length: 7 }, (_, n) => item(n + 1)), item(8, { status: "predicted", from: "review", title: "A guess" })] }, [], at);
+    assert.match(several, /^4\. \*\*.*\n5\. _3 more \(5–7\) in FIX\.md_$/m, "a list item of its own, after item 4");
+    const none = productDoc({ ...base, fixes: [item(1), item(2)] }, [], at);
+    assert.doesNotMatch(none, /in FIX\.md_|not shown here/, "nothing left out: no gap, nothing to count");
+  });
+
+  it("names report.html's photos from the output folder, never by a full path", () => {
+    const fixes = [item(1, { photo: "screens/fix-x1.jpg" })];
+    const far = reportPage({ ...base, fixes }, at, new Map(), "/somewhere/else/contextmachines");
+    assert.doesNotMatch(far, /\/somewhere\/else/);
+    assert.match(far, /- \*\*Photo:\*\* \[screens\/fix-x1\.jpg\]\(screens\/fix-x1\.jpg\)/);
+    assert.doesNotMatch(reportPage({ ...base, fixes }, at, new Map(), "C:\\work\\contextmachines"), /C:\\work/);
+    assert.match(reportPage({ ...base, fixes }, at, new Map(), "out/run"), /\[out\/run\/screens\/fix-x1\.jpg\]/, "a folder named from here stays so");
+  });
+
+  it("says every screen opened without signing in, rather than that only the public part was learned", () => {
+    const open = { ...base, fixes: [], learner: { ...base.learner!, stoppedAtDoor: true, wallOffer: "add-code" as const, standIn: { status: "no_adapter", message: "Nothing the stand-in user opened asked for a session it could answer, so only the public pages were learned.", reached: 0, notReached: [] } } };
+    const text = fixDoc(open, at);
+    assert.match(text, /^- All 2 screens it found opened without signing in\.$/m);
+    assert.doesNotMatch(text, /only the public pages|--code/);
+    assert.match(reportPage(open, at), /All 2 screens it found opened without signing in\./);
+    assert.equal(shortOfWhole(open), undefined, "and the run's end has nothing to warn about");
+    assert.match(shortOfWhole({ ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, status: "unknown_provider" } } }) ?? "", /only the public pages/);
+    assert.equal(allOpenWords({ ...open, screens: [...open.screens, { path: "/login", title: "Log in", headings: [] }] }), "All 2 screens it found opened without signing in.", "the sign-in itself isn't counted");
+    assert.equal(allOpenWords({ ...open, screens: [...open.screens, { path: "/x", title: null, headings: [], seenWith: "stand-in" }] }), undefined, "something was only seen with a session");
+    assert.equal(allOpenWords({ ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, status: "server_auth" } } }), undefined, "the server keeps something behind the sign-in");
+    const unknown = { ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, status: "unknown_provider", message: "The stand-in user doesn't know the sign-in library \"acme-auth\", so only the public pages were learned." } } };
+    assert.equal(allOpenWords(unknown), undefined, "the stand-in never ran, so nothing says the rest is open");
+    assert.match(fixDoc(unknown, at), /doesn't know the sign-in library/);
+    assert.equal(allOpenWords({ ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, notReached: [{ path: "/admin", why: "no_access" }] } } }), undefined, "a screen it couldn't open");
+    const atLogIn = { ...open, screens: [...open.screens, { path: "/", title: "Log in | Demo", headings: [] }], learner: { ...open.learner, standIn: { ...open.learner.standIn, notReached: [{ path: "/", why: "sign_in" as const }] } } };
+    assert.equal(allOpenWords(atLogIn), "All 2 screens it found opened without signing in.", "held at the sign-in form itself isn't a screen kept from it");
+    assert.equal(allOpenWords({ ...atLogIn, learner: { ...atLogIn.learner, standIn: { ...atLogIn.learner.standIn, notReached: [{ path: "/billing", why: "sign_in" as const }] } } }), undefined, "a product screen that asked for a sign-in");
+  });
+
+  it("sees a way to make an account in an address or in a link's words, wherever they say it", () => {
+    const control = (label: string, kind = "link") => [{ controls: [{ kind, label }] }];
+    assert.equal(signUpIn(["/users/sign_up"], []), true);
+    assert.equal(signUpIn(["/signup"], []), true);
+    assert.equal(signUpIn(["/create_account/"], []), true);
+    assert.equal(signUpIn(["/signals", "/registered-users"], []), false);
+    assert.equal(signUpIn([], control("Don't have an account? Sign up")), true);
+    assert.equal(signUpIn([], control("Create a free account", "button")), true);
+    assert.equal(signUpIn([], control("Join")), true);
+    assert.equal(signUpIn([], control("Join now")), true);
+    assert.equal(signUpIn([], control("Join the meeting")), true, "a label led by Join");
+    assert.equal(signUpIn([], control("Ask to join the meeting")), false, "join further in isn't a sign-up");
+    assert.equal(signUpIn([], control("Sign up", "field")), false, "a box's own words aren't a way in");
+    assert.equal(signUpIn([], control(`Read this before you sign up: ${"x".repeat(80)}`)), false, "a paragraph isn't a link");
+  });
+
+  it("keeps the --ai the run was given in the command it suggests", () => {
+    const learner = { visited: 1, stoppedBy: "complete", savesStopped: 0, seconds: 1 };
+    assert.match(wallNext({ url: "https://app.example.com/", learner: { ...learner, wallOffer: "add-code", aiFlag: "codex" } })!, /learn https:\/\/app\.example\.com\/ --code --ai codex$/);
+    assert.match(wallNext({ url: "https://app.example.com/", learner: { ...learner, wallOffer: "login", aiFlag: "none" } })!, /--login --ai none$/);
+    assert.match(wallNext({ url: "https://app.example.com/", learner: { ...learner, wallOffer: "add-code" } })!, /--code$/, "none given, none added");
+    assert.doesNotMatch(wallNext({ url: "https://app.example.com/", learner: { ...learner, wallOffer: "add-code", aiFlag: "x; rm" } })!, /rm/, "only a name is ever put in a command");
+  });
+});
