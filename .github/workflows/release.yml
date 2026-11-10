@@ -68,10 +68,11 @@ jobs:
 
       - name: Try the packed package
         run: |
-          npx --yes "$TARBALL" --help
+          # npx runs a package file through --package: given as the command, the file itself is run.
+          npx --yes --package="$TARBALL" -- contextmachines --help
           node examples/invoice/server.mjs &
           for i in $(seq 1 30); do curl -sf http://localhost:3000/ > /dev/null && break; sleep 1; done
-          npx --yes "$TARBALL" learn http://localhost:3000 --ai none --minutes 1 --out "$RUNNER_TEMP/smoke"
+          npx --yes --package="$TARBALL" -- contextmachines learn http://localhost:3000 --ai none --minutes 1 --out "$RUNNER_TEMP/smoke"
           test -s "$RUNNER_TEMP/smoke/PRODUCT.md"
 
       - name: Publish to npm
