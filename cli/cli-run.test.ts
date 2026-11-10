@@ -1,6 +1,6 @@
 // The command line around a run: what it checks before one, what it says first, how Ctrl-C ends
 // one, and how the new user's part ends on an app with no sign-up. Through the real command.
-//   node --test cli/cli-run.test.ts
+//   node --test apps/cli/cli-run.test.ts
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -71,7 +71,7 @@ describe("--json, when it can't go on", () => {
   });
 });
 
-describe("Ctrl-C", { skip: browser ? false : "no browser installed" }, () => {
+describe("Ctrl-C", { skip: !browser ? "no browser installed" : process.platform === "win32" && "a child can't be sent Ctrl-C on Windows" }, () => {
   // A page that never comes: the run is still at its first screen whenever Ctrl-C is pressed.
   let app: { server: Server; url: string };
   let dir: string;
@@ -159,7 +159,7 @@ const loginAppIn = (dir: string, signUp: boolean) =>
     child.stdout.once("data", (port) => done({ url: `http://127.0.0.1:${String(port).trim()}/`, close: () => child.kill() }));
   });
 
-describe("a run that meets a sign-in", { skip: browser ? false : "no browser installed" }, () => {
+describe("a run that meets a sign-in", { skip: !browser ? "no browser installed" : process.platform === "win32" && "which folder serves a port is read on macOS and Linux only" }, () => {
   const learn = (url: string, dir: string) =>
     new Promise<{ code: number | null; text: string }>((done) => {
       const child = spawn(process.execPath, [cli, "learn", url, "--minutes", "1", "--pages", "4", "--ai", "none", "--no-journeys"], { cwd: dir, env: plainEnv(), stdio: ["ignore", "pipe", "pipe"] });
