@@ -4,6 +4,13 @@ What changed in each release, for the people running it. Versions follow [semant
 
 ## Unreleased
 
+## 0.1.1 - 2026-11-10
+
+- **Codex says why it failed.** A failure no longer always says "run codex login": that hint came from Codex repeating the question, which talks about sign-ins. Codex's own error is shown instead, and a model your plan can't use says so and to pass `--model`.
+- **Codex runs show their tokens and model** in the AI row, as Claude Code runs do. Codex gives one total, so no share cached is claimed.
+- **`f` keeps your `--model`.** Claude Code or Codex starts on the model the run used.
+- **The `cli/` folder reads right on GitHub.** Its README's picture and links pointed inside `cli/` and led nowhere; they now point at the repository's own files, and a link to a section of `PRIVACY.md` on npm lands on that section.
+
 ## 0.1.0 - 2026-11-10
 
 The first public release. Point it at a running web app and it learns the product the way a new user would, answering its saves in the browser.

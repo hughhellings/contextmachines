@@ -1519,9 +1519,9 @@ describe("the npm package's notes", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-  it("resolve links from the root, leaving anchors and full addresses alone", async () => {
+  it("resolve links from the root, keeping their anchors and leaving anchors and full addresses alone", async () => {
     const { absoluteLinks } = (await import(new URL("./build.mjs", import.meta.url).href)) as { absoluteLinks: (markdown: string) => string };
-    assert.equal(absoluteLinks("[s](SECURITY.md) [e](examples/invoice) ![p](.github/assets/terminal.svg) [a](#install) [w](https://example.com/x)"), "[s](https://github.com/hughhellings/contextmachines/blob/main/SECURITY.md) [e](https://github.com/hughhellings/contextmachines/blob/main/examples/invoice) ![p](https://raw.githubusercontent.com/hughhellings/contextmachines/main/.github/assets/terminal.svg) [a](#install) [w](https://example.com/x)");
+    assert.equal(absoluteLinks("[s](SECURITY.md) [e](examples/invoice) ![p](.github/assets/terminal.svg) [a](#install) [w](https://example.com/x) [h](PRIVACY.md#the-stand-in-user)"), "[s](https://github.com/hughhellings/contextmachines/blob/main/SECURITY.md) [e](https://github.com/hughhellings/contextmachines/blob/main/examples/invoice) ![p](https://raw.githubusercontent.com/hughhellings/contextmachines/main/.github/assets/terminal.svg) [a](#install) [w](https://example.com/x) [h](https://github.com/hughhellings/contextmachines/blob/main/PRIVACY.md#the-stand-in-user)");
   });
 });
 

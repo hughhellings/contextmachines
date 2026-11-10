@@ -21,7 +21,7 @@ npx contextmachines learn https://yourapp.com
 > [!NOTE]
 > Context Machines is 0.x. What it prints, its options and the shape of `map.json` may still change between minor versions (0.1 to 0.2), never in a patch (0.1.0 to 0.1.1); [CHANGELOG.md](CHANGELOG.md) says what changed. The GitHub Action's `@v0.1` tag moves only to 0.1.x patches.
 
-A browser follows links, opens menus and pop-ups, fills in forms with test values and presses their buttons. **Saves are answered in the browser, and anything it can't show is a read is held back** ([what that covers, and what it can't prove](#how-it-stays-read-only)). Then it works out what it saw. On [the example invoicing app](examples/invoice):
+A browser follows links, opens menus and pop-ups, fills in forms with test values and presses their buttons. **Saves are answered in the browser, and anything it can't be sure is only a read is held back** ([what that covers, and what it can't prove](#how-it-stays-read-only)). Then it works out what it saw. On [the example invoicing app](examples/invoice):
 
 ```
 ℹ learning localhost:3000 · AI: your Claude Code sign-in · saves stopped
@@ -398,7 +398,7 @@ A signed-in Claude Code or Codex is its own program, with its own settings for w
 
 What it guarantees, and what it doesn't:
 
-- Saves are answered in the browser unless you pass `--create`, and anything it can't show is a read is held back. A GET that writes behind an innocent name can't be told from a read ([what it can't prove](#what-it-cant-prove)), so use a test account or staging when signed in.
+- Saves are answered in the browser unless you pass `--create`, and anything it can't be sure is only a read is held back. A GET that writes behind an innocent name can't be told from a read ([what it can't prove](#what-it-cant-prove)), so use a test account or staging when signed in.
 - With `--login` or `--session` it acts as that account.
 - Values typed into forms are test values, never yours, and no field's value is sent to the AI.
 - Source code goes to your AI only on a yes. `.env` files, paths that name a secret and files holding anything shaped like one stay here. That check goes by shape, so it can't catch everything: a plain-word password in a comment or a key split into parts can still go.

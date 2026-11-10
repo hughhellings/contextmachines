@@ -190,6 +190,16 @@ describe("handing the list to the coding agent", () => {
     assert.equal(code, 3);
     assert.equal(fake.said().trim(), fixPrompt("contextmachines/FIX.md"), "one argument, the ask, whole");
   });
+  it("passes the run's --model on, as each agent takes it, and none when the run had none", POSIX_ONLY, async () => {
+    for (const [agent, flag] of [["codex", "-m"], ["claude", "--model"]] as const) {
+      const fake = fakeCommand(agent, 0, false);
+      const env = { ...process.env, PATH: `${fake.bin}:/usr/bin:/bin` };
+      await startAgent(agent, "fix it", { model: "gpt-6-luna", env, signals: signals() });
+      assert.deepEqual(fake.said().trim().split("\n"), [flag, "gpt-6-luna", "fix it"]);
+      await startAgent(agent, "fix it", { env, signals: signals() });
+      assert.equal(fake.said().trim(), "fix it");
+    }
+  });
   it("never guesses: no agent with an API key, none that isn't on PATH, none on Windows", () => {
     const fake = fakeCommand("codex");
     assert.equal(agentFor(undefined, { PATH: fake.bin }, "darwin"), undefined, "an API key's run");

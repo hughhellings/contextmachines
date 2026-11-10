@@ -1342,7 +1342,7 @@ if (menuShown) {
         say(`  ${c.grey(`starting ${AGENT_NAMES[offer.agent!]} with:`)}`);
         for (const line of wrapTo(prompt, Math.max(20, Math.min(cols, 100) - 4))) say(`    ${line}`);
         say();
-        return startAgent(offer.agent!, prompt);
+        return startAgent(offer.agent!, prompt, { model: str("model") });
       },
     },
     failed: (key, error) => say(`  ${c.yellow("!")} ${key === "c" ? "couldn't copy it" : key === "o" ? "couldn't open it" : "couldn't do that"}: ${safe(firstLine(error))}`),

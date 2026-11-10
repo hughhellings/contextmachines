@@ -23,8 +23,10 @@ const DIRECTORY = "cli";
 export function absoluteLinks(markdown) {
   return markdown.replace(/(!?)\[([^\]]*)\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g, (all, bang, text, href, title) => {
     if (/^([a-z][a-z0-9+.-]*:|#|\/\/)/i.test(href)) return all;
-    const path = new URL(href, "https://x/").pathname.slice(1);
-    const image = bang || /\.(png|jpe?g|gif|svg|webp)$/i.test(href.split(/[?#]/)[0]);
+    // The anchor stays: a link to a section of another note still lands on it.
+    const url = new URL(href, "https://x/");
+    const path = url.pathname.slice(1) + url.search + url.hash;
+    const image = bang || /\.(png|jpe?g|gif|svg|webp)$/i.test(url.pathname);
     // GitHub shows a folder's page at its blob address too.
     const base = image ? `https://raw.githubusercontent.com/${REPO}/main/` : `https://github.com/${REPO}/blob/main/`;
     return `${bang}[${text}](${base}${path}${title})`;

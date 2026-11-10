@@ -141,8 +141,8 @@ export interface AiTotals {
   /** How many of the asks failed, when any did. */
   failed?: number;
   /**
-   * All four kinds of token together. The token counts are left out when no answer said any (Codex
-   * says none): none would read as no tokens used, not as none reported.
+   * All four kinds of token together. The token counts are left out when no answer said any: none
+   * would read as no tokens used, not as none reported. Codex says one total, counted as input.
    */
   tokens?: number;
   input?: number;
@@ -165,7 +165,13 @@ export function aiTotals(asks: readonly AskTiming[]): AiTotals | undefined {
   const failed = asks.filter((a) => a.failed).length;
   const counted = { asks: asks.length, ...(failed ? { failed } : {}) };
   const said = asks.filter((a) => a.tokens);
-  if (!said.length) return counted;
+  if (!said.length) {
+    // No tokens said, but the asks still name who answered: the most asked first.
+    const byAsks = new Map<string, number>();
+    for (const a of asks) if (a.model) byAsks.set(a.model, (byAsks.get(a.model) ?? 0) + 1);
+    const named = [...byAsks].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+    return { ...counted, ...(named.length ? { model: named[0], models: named } : {}) };
+  }
   const sum = (k: "input" | "cacheRead" | "cacheWrite" | "output") => said.reduce((n, a) => n + a.tokens![k], 0);
   const [input, cacheRead, cacheWrite, output] = [sum("input"), sum("cacheRead"), sum("cacheWrite"), sum("output")];
   const into = input + cacheRead + cacheWrite;
@@ -404,7 +410,7 @@ function claudeCode(model: string | undefined, effort?: "low"): Ai {
     agent: "claude",
     async ask(system, question, schema) {
       // Telemetry, update checks and error reports off: each start cost ~9s of CPU, beside the browsers.
-      const out = await run("claude", { ...agentEnv("claude"), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" }, [
+      const { out } = await run("claude", { ...agentEnv("claude"), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" }, [
         "-p", "--output-format", "json", "--json-schema", JSON.stringify(schema), "--system-prompt", system,
         // Only the question: no tools, settings, skills or connected servers of theirs.
         "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence",
@@ -440,7 +446,7 @@ const CODEX_QUIET = ["web_search=\"disabled\"", ...CODEX_FEATURES_OFF.map((f) =>
  */
 let codexServersOff: Promise<string[]> | undefined;
 function codexServers(): Promise<string[]> {
-  codexServersOff ??= run("codex", agentEnv("codex"), ["mcp", "list", "--json", ...CODEX_QUIET], "").then((out) => {
+  codexServersOff ??= run("codex", agentEnv("codex"), ["mcp", "list", "--json", ...CODEX_QUIET], "").then(({ out }) => {
     const servers = (JSON.parse(out) as { name: string; enabled?: boolean }[]).filter((s) => s.enabled !== false).map((s) => s.name);
     const odd = servers.find((name) => !/^[A-Za-z0-9_-]+$/.test(name));
     if (odd) throw new Error(`codex: its MCP server "${odd}" can't be turned off for this run, so it isn't used. Use an API key instead (see --help)`);
@@ -491,8 +497,10 @@ function codex(model: string | undefined): Ai {
         mkdirSync(work);
         writeFileSync(join(dir, "schema.json"), JSON.stringify(schema));
         const serversOff = await codexServers();
-        await run("codex", agentEnv("codex"), ["exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", ...CODEX_QUIET, ...serversOff, "-C", work, "--output-schema", join(dir, "schema.json"), "--output-last-message", join(dir, "answer.json"), ...(model ? ["-m", model] : []), "-"], `${system}\n\n${question}`, work);
-        return { text: readFileSync(join(dir, "answer.json"), "utf8") };
+        const { err } = await run("codex", agentEnv("codex"), ["exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", ...CODEX_QUIET, ...serversOff, "-C", work, "--output-schema", join(dir, "schema.json"), "--output-last-message", join(dir, "answer.json"), ...(model ? ["-m", model] : []), "-"], `${system}\n\n${question}`, work);
+        const usage = codexUsage(err, model);
+        const answer: AiAnswer = { text: readFileSync(join(dir, "answer.json"), "utf8"), ...(usage ? { usage } : {}) };
+        return answer;
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -500,11 +508,55 @@ function codex(model: string | undefined): Ai {
   };
 }
 
+/** Codex's header, between its first two rules ("model: gpt-6-luna"): the question it repeats comes after. */
+const codexHeader = (err: string) => err.split(/^-{4,}$/m)[1] ?? "";
+
+/**
+ * What a Codex answer took, from the end of its stderr ("tokens used\n8,217"): one total, so it's
+ * counted as input. The last one, as the question it repeats comes before. The model is the one
+ * asked for, else the one its header names.
+ */
+export function codexUsage(err: string, model?: string): AiUsage | undefined {
+  const said = [...err.matchAll(/tokens used\s*\n([\d,]+)/g)].pop()?.[1];
+  if (!said) return undefined;
+  const name = model ?? codexHeader(err).match(/^model: *(\S+)/m)?.[1];
+  // One total, never split: counted as output, so no "% cached" is said of what Codex never says it cached.
+  return { input: 0, cacheRead: 0, cacheWrite: 0, output: Number(said.replace(/,/g, "")), ...(name ? { model: name } : {}) };
+}
+
+/** Said when the plan can't use the model asked for (or Codex's own default). */
+const MODEL_REFUSED = /model_not_found|model is not supported|does not have access to (?:the )?model/i;
+
+/**
+ * Why an agent failed, in its own words, with how to sign in when that's why. Codex repeats the whole
+ * question on stderr after a "user" line, and the question holds words like "sign in": it's taken out,
+ * and only Codex's own ERROR lines are read, else what it said before its header ended.
+ */
+export function failure(command: "claude" | "codex", code: number | null, err: string, out: string, input = ""): string {
+  if (command === "codex") {
+    const asked = input.trim();
+    const own = asked && err.includes(asked) ? err.replace(asked, "") : err;
+    const lines = own.split("\n").filter((l) => l.startsWith("ERROR:"));
+    // No ERROR line: what it said before the question, past its header (a sign-in that failed at the start).
+    const before = own.split(/^user$/m)[0]!.split(/^-{4,}$/m);
+    const errors = lines.length ? lines.join("\n") : (before.length > 2 ? before.slice(2).join("\n") : before[0]!).replace(/^Reading additional input from stdin\.*$/m, "");
+    const last = errors.trim().split("\n").pop() ?? "";
+    const said = (last.match(/"message":\s*"([^"]+)"/)?.[1] ?? last.match(/"detail":\s*"([^"]+)"/)?.[1] ?? last.replace(/^ERROR:\s*/, "")).trim() || `exit ${code}`;
+    if (MODEL_REFUSED.test(errors)) {
+      const name = said.match(/model\s+[`'"]([^`'"\s]+)[`'"]|[`'"]([^`'"\s]+)[`'"]\s+model/)?.slice(1).find(Boolean) ?? codexHeader(err).match(/^model: *(\S+)/m)?.[1];
+      return `codex can't use ${name ? `the model "${name.slice(0, 60)}"` : "its model"}: pass --model with one your plan has`;
+    }
+    return `codex: ${said.slice(0, 200)}${SIGN_IN.test(errors) ? ` (${SIGN_IN_HINT.codex})` : ""}`;
+  }
+  const said = (err.match(/"message":"([^"]+)"/)?.[1] ?? err.trim().split("\n").pop() ?? out.trim().slice(0, 200)) || `exit ${code}`;
+  return `${command}: ${said.slice(0, 200)}${SIGN_IN.test(`${err}\n${out}`) ? ` (${SIGN_IN_HINT[command]})` : ""}`;
+}
+
 /**
  * A command run with its question on stdin, in `cwd`, with only the environment it is given; its
- * output, or its own words when it fails or takes too long, with how to sign in when that's why.
+ * output and stderr, or its own words when it fails or takes too long (see failure).
  */
-function run(command: "claude" | "codex", env: NodeJS.ProcessEnv, args: string[], input: string, cwd = tmpdir()): Promise<string> {
+function run(command: "claude" | "codex", env: NodeJS.ProcessEnv, args: string[], input: string, cwd = tmpdir()): Promise<{ out: string; err: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     let out = "";
@@ -525,10 +577,8 @@ function run(command: "claude" | "codex", env: NodeJS.ProcessEnv, args: string[]
     child.on("close", (code) => {
       clearTimeout(timer);
       if (timedOut) return reject(new Error(`${command} didn't answer in ${ANSWER_TIMEOUT_MS / 60_000} minutes`));
-      if (code === 0) return resolve(out);
-      const said = (err.match(/"message":"([^"]+)"/)?.[1] ?? err.trim().split("\n").pop() ?? out.trim().slice(0, 200)) || `exit ${code}`;
-      const hint = SIGN_IN.test(`${err}\n${out}`) ? ` (${SIGN_IN_HINT[command]})` : "";
-      reject(new Error(`${command}: ${said.slice(0, 200)}${hint}`));
+      if (code === 0) return resolve({ out, err });
+      reject(new Error(failure(command, code, err, out, input)));
     });
     child.stdin.end(input);
   });

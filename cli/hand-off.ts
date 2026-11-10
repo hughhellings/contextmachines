@@ -132,9 +132,10 @@ export interface AgentSignals {
 /**
  * The person's own agent started on the list, in this terminal: its stdin, stdout and stderr are
  * this one's, and this process waits and ends with its code. Ctrl-C while it runs goes to the agent
- * (the terminal sends it to both); this process lets it pass, and ends when the agent does.
+ * (the terminal sends it to both); this process lets it pass, and ends when the agent does. The run's
+ * --model goes with it: the agent's own default may be one the person's plan can't use.
  */
-export function startAgent(agent: Agent, prompt: string, { spawn = spawnChild as unknown as Spawn, env = process.env, signals = process as AgentSignals }: { spawn?: Spawn; env?: NodeJS.ProcessEnv; signals?: AgentSignals } = {}): Promise<number> {
+export function startAgent(agent: Agent, prompt: string, { model, spawn = spawnChild as unknown as Spawn, env = process.env, signals = process as AgentSignals }: { model?: string; spawn?: Spawn; env?: NodeJS.ProcessEnv; signals?: AgentSignals } = {}): Promise<number> {
   return new Promise((resolve) => {
     const pass = () => {};
     signals.on("SIGINT", pass);
@@ -143,7 +144,7 @@ export function startAgent(agent: Agent, prompt: string, { spawn = spawnChild as
       resolve(code);
     };
     try {
-      const child = spawn(agent, [prompt], { stdio: "inherit", env });
+      const child = spawn(agent, [...(model ? [agent === "codex" ? "-m" : "--model", model] : []), prompt], { stdio: "inherit", env });
       child.on("error", () => end(127));
       child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => end(code ?? (signal === "SIGINT" ? 130 : 1)));
     } catch {
