@@ -108,6 +108,9 @@ jobs:
           # Its licence, its notice and the bundled packages' licences.
           listed="$(tar -tzf "$(cat ../../packed.txt)")"
           for f in LICENSE NOTICE THIRD-PARTY-NOTICES.txt; do echo "$listed" | grep -qx "package/$f" || { echo "::error::the package has no $f"; exit 1; }; done
+          # Published as it's packed: npm changes nothing on the way (it once dropped a "./bin.mjs" command).
+          npm publish --dry-run > ../../publish.txt 2>&1 || { cat ../../publish.txt; exit 1; }
+          if grep -q "auto-corrected" ../../publish.txt; then cat ../../publish.txt; echo "::error::npm would change package.json when publishing"; exit 1; fi
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}

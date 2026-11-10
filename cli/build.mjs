@@ -124,7 +124,8 @@ async function main() {
     license: "Apache-2.0",
     author: "Hugh Hellings",
     type: "module",
-    bin: { contextmachines: "./bin.mjs" },
+    // No "./": npm 11 drops a bin path that starts with one when it publishes (npm pack keeps it).
+    bin: { contextmachines: "bin.mjs" },
     repository: { type: "git", url: `git+https://github.com/${REPO}.git`, directory: DIRECTORY },
     homepage: `https://github.com/${REPO}#readme`,
     bugs: { url: `https://github.com/${REPO}/issues` },
