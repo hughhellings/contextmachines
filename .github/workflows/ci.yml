@@ -61,17 +61,23 @@ jobs:
           git config --global core.symlinks true
           git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: cli/'s documents are the root's
-        run: |
-          for f in README.md PRIVACY.md CHANGELOG.md LICENSE NOTICE; do
-            cmp -s "$f" "cli/$f" || { echo "::error file=cli/$f::cli/$f is not the root's $f (a link checked out as a file?)"; exit 1; }
-          done
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npx playwright install chromium
+      # A note with relative links is a copy with them made absolute, so GitHub's cli/ page reads right.
+      - name: cli/'s documents are the root's
+        run: |
+          for f in README.md PRIVACY.md CHANGELOG.md LICENSE NOTICE; do
+            node --input-type=module -e '
+              import { readFileSync } from "node:fs";
+              import { absoluteLinks } from "./cli/build.mjs";
+              const f = process.argv[1], root = readFileSync(f, "utf8");
+              process.exit(readFileSync(`cli/${f}`, "utf8") === (f.endsWith(".md") ? absoluteLinks(root) : root) ? 0 : 1);
+            ' "$f" || { echo "::error file=cli/$f::cli/$f is not the root's $f (a link checked out as a file?)"; exit 1; }
+          done
       - run: npm run build:snippet
       - run: node --test --test-timeout=360000 cli/*.test.ts action/*.test.ts
       - name: The built CLI starts
