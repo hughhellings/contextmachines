@@ -1,0 +1,60 @@
+name: A finding is wrong or missing
+description: It reported an issue that isn't one, or missed one the browser could have proved.
+labels: [findings]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A finding must be something the browser saw happen. A false one is the worst bug this project can have, so these reports go first.
+
+        Output from a run can hold the site's own text and addresses. **Redact anything you wouldn't post in public.**
+  - type: dropdown
+    id: which
+    attributes:
+      label: Which way is it wrong?
+      options:
+        - "It reported an issue that isn't one (a false alarm)"
+        - "It missed an issue it should have found"
+        - "The issue is real but described wrongly"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of finding
+      options:
+        - Does nothing
+        - Crashes
+        - Request fails
+        - Broken link
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: The finding
+      description: The line from the terminal, PRODUCT.md or map.json (its entry under "findings").
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: actually
+    attributes:
+      label: What really happens
+      description: What pressing the button, loading the page or following the link does when you try it yourself.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where to see it
+      description: A public address we can run against, or a small page that shows it (a gist or a repository).
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `npx contextmachines --version`, and your Node version.
+      placeholder: "contextmachines 0.1.0, node 24.11.0"
+    validations:
+      required: true

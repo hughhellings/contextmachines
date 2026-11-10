@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "files-1",
+  "about": "The files contextmachines wrote in this folder: the only ones it will ever remove.",
+  "files": [
+    "map.json",
+    "FIX.md",
+    "PRODUCT.md",
+    "report.html",
+    "screens/dashboard.jpg",
+    "screens/invoices_new-4f8957.jpg",
+    "screens/invoices_id-bd401b.jpg",
+    "screens/home-42099b.jpg",
+    "screens/clients_new-2727df.jpg",
+    "screens/reports.jpg",
+    "screens/settings_payments-84d758.jpg"
+  ],
+  "productHash": "f4e3438bd33961d062caa289677e875dfd85fc5e718b460037aea919752b45c9"
+}

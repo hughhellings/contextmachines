@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to a pull request makes the older run moot, so a pull request's runs share a group and
+  # cancel. A push to main is grouped by its commit, so every commit gets a run of its own.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Development runs the TypeScript sources directly, which needs a current Node.
+          node-version: 26
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # The README's first command installs the browser for one Playwright version: a bump of the CLI's
+      # Playwright (Dependabot's, say) that left it behind would install a browser the CLI can't use.
+      - name: The README installs the browser the CLI drives
+        run: |
+          want="$(node -p 'require("./cli/package.json").dependencies.playwright')"
+          if ! grep -qF "npx playwright@$want install chromium" README.md; then
+            echo "::error file=README.md::README.md should say 'npx playwright@$want install chromium', the Playwright cli/package.json depends on."
+            exit 1
+          fi
+      - run: npx playwright install --with-deps chromium
+      - run: npm run typecheck
+      - run: npm run build:snippet
+      - run: npm test
+      - run: npm run build
+
+  # The CLI's and the Action's own tests where people run them, and the built CLI started there.
+  os:
+    name: CLI tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The files as the npm package has them: cli/'s documents are links to the root's, which git on
+      # Windows would check out as small text files, and LF would become CRLF.
+      - run: |
+          git config --global core.symlinks true
+          git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: cli/'s documents are the root's
+        run: |
+          for f in README.md PRIVACY.md CHANGELOG.md LICENSE NOTICE; do
+            cmp -s "$f" "cli/$f" || { echo "::error file=cli/$f::cli/$f is not the root's $f (a link checked out as a file?)"; exit 1; }
+          done
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install chromium
+      - run: npm run build:snippet
+      - run: node --test --test-timeout=360000 cli/*.test.ts action/*.test.ts
+      - name: The built CLI starts
+        run: |
+          npm run build
+          want="$(node -p 'require("./cli/package.json").version')"
+          got="$(node cli/dist/bin.mjs --version)"
+          test "$got" = "contextmachines $want" || { echo "::error::--version said '$got', expected 'contextmachines $want'"; exit 1; }
+          node cli/dist/bin.mjs --help > /dev/null
+          node cli/dist/bin.mjs learn --help > /dev/null
+
+  package:
+    name: Pack and run on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The published package is one bundled JavaScript file: it must run on every Node it says it supports.
+        node: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Pack
+        run: |
+          cd cli/dist
+          npm pack --silent > ../../packed.txt
+          echo "TARBALL=$PWD/$(cat ../../packed.txt)" >> "$GITHUB_ENV"
+          # Its licence, its notice and the bundled packages' licences.
+          listed="$(tar -tzf "$(cat ../../packed.txt)")"
+          for f in LICENSE NOTICE THIRD-PARTY-NOTICES.txt; do echo "$listed" | grep -qx "package/$f" || { echo "::error::the package has no $f"; exit 1; }; done
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install the package as a user would
+        run: |
+          mkdir "$RUNNER_TEMP/try" && cd "$RUNNER_TEMP/try"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$TARBALL"
+          npx contextmachines --help
+          # The browser for the Playwright the package depends on, not whichever npx would fetch.
+          npx playwright install --with-deps chromium
+      - name: Learn the example app, without an AI
+        run: |
+          node examples/invoice/server.mjs &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/ > /dev/null && break; sleep 1; done
+          cd "$RUNNER_TEMP/try"
+          npx contextmachines learn http://localhost:3000 --ai none --minutes 1 --out out
+          test -s out/PRODUCT.md
+          test -s out/map.json
+          # The example has one dead button and nothing else wrong: exactly that issue, and no false alarm.
+          node -e '
+            const m = require("./out/map.json");
+            const issues = m.findings.map((f) => `${f.kind} ${f.target}`);
+            if (m.screens.length < 6) throw new Error(`only ${m.screens.length} screens`);
+            if (issues.join() !== "does_nothing Import invoices") throw new Error(`expected one issue, "Import invoices" does nothing; got: ${issues.join("; ") || "none"}`);
+          '
+
+  action:
+    name: The Action, on the example app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+      # The Action runs the published package; here it runs this commit's CLI instead (its `cli` input).
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start the example app, before and after a change
+        run: |
+          node examples/invoice/server.mjs &
+          PORT=3001 node examples/invoice/server.mjs --changed &
+          for port in 3000 3001; do for i in $(seq 1 30); do curl -sf "http://localhost:$port/" > /dev/null && break; sleep 1; done; done
+      - id: product
+        uses: ./action
+        with:
+          url: http://localhost:3001
+          base-url: http://localhost:3000
+          minutes: "1"
+          comment: "false"
+          artifact: "false"
+          cli: cli/dist/contextmachines.mjs
+      - name: The change was seen
+        run: test "${{ steps.product.outputs.changed }}" = "true"

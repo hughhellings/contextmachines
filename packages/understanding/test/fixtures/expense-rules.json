@@ -1,0 +1,247 @@
+[
+  {
+    "rules": [
+      {
+        "id": "EX1_receipt_missing",
+        "version": 1,
+        "kind": "deterministic",
+        "bindsTo": {
+          "actions": [
+            "expense.create"
+          ]
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields._items"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields._items.length"
+                  },
+                  "right": {
+                    "lit": 1
+                  }
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields.receipt_id"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields.receipt_id.empty"
+                  },
+                  "right": {
+                    "lit": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "action": "nudge",
+        "message": "No receipt on this expense. Attach one so it can be approved without a follow-up.",
+        "status": "approved"
+      },
+      {
+        "id": "EX2_category_missing",
+        "version": 1,
+        "kind": "deterministic",
+        "bindsTo": {
+          "actions": [
+            "expense.create"
+          ]
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields._items"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields._items.length"
+                  },
+                  "right": {
+                    "lit": 1
+                  }
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields.category_id"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields.category_id.empty"
+                  },
+                  "right": {
+                    "lit": true
+                  }
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields.tags"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields.tags.empty"
+                  },
+                  "right": {
+                    "lit": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "action": "nudge",
+        "message": "Which category is this? Filing it keeps your monthly totals right.",
+        "status": "approved"
+      },
+      {
+        "id": "EX3_refund_without_note",
+        "version": 1,
+        "kind": "deterministic",
+        "bindsTo": {
+          "actions": [
+            "expense.create"
+          ]
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields._items"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields._items.length"
+                  },
+                  "right": {
+                    "lit": 1
+                  }
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "startsWith",
+                  "left": {
+                    "var": "fields.amount.value"
+                  },
+                  "right": {
+                    "lit": "-"
+                  }
+                },
+                {
+                  "op": "lt",
+                  "left": {
+                    "var": "fields.amount.value"
+                  },
+                  "right": {
+                    "lit": 0
+                  }
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "arg": {
+                    "op": "exists",
+                    "arg": {
+                      "var": "fields.notes"
+                    }
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "var": "fields.notes.empty"
+                  },
+                  "right": {
+                    "lit": true
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "action": "nudge",
+        "message": "A refund with no note. Say what it was for so it can be matched to the original.",
+        "status": "approved"
+      }
+    ],
+    "allowValues": [
+      "amount"
+    ]
+  }
+]

@@ -1,0 +1,23 @@
+name: Feature request
+description: Something it should learn, report or do that it doesn't.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The job, not the solution. What were you running it for, and where did it fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you'd like it to work. For a new kind of finding, say how the browser could prove it happened.
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Sites where it would matter, other tools that do it, what you do today instead.

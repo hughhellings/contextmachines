@@ -1,0 +1,26 @@
+{
+  "name": "contextmachines-repo",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "cli",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run && node --test action/run.test.ts cli/ai.test.ts cli/brief.test.ts cli/code-map.test.ts cli/end-of-run.test.ts cli/fix-list.test.ts cli/hand-off.test.ts cli/init.test.ts cli/learn-screens.test.ts cli/learn-wall.test.ts cli/predictions.test.ts cli/project.test.ts cli/repo.test.ts cli/report.test.ts cli/run-screen.test.ts cli/understand.test.ts",
+    "build:snippet": "npm run build -w @contextmachines/snippet",
+    "build": "npm run build -w cli --",
+    "check": "npm run typecheck && npm run build:snippet && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.10.2",
+    "happy-dom": "^21.0.4",
+    "playwright": "1.61.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.12"
+  }
+}

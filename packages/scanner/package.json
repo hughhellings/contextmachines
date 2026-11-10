@@ -1,0 +1,15 @@
+{
+  "name": "@contextmachines/scanner",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "playwright": "1.61.0",
+    "@contextmachines/schemas": "0.0.0",
+    "@contextmachines/snippet": "0.0.0"
+  }
+}

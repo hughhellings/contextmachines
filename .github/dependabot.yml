@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      dev-tooling:
+        dependency-type: development
+        patterns: ["*"]
+    # Playwright is pinned exactly: the package depends on that version and its browser.
+    # It moves by hand, with a run of the tests against the new browser.
+    ignore:
+      - dependency-name: playwright
+  - package-ecosystem: github-actions
+    directories: ["/", "/action"]
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore(ci)"

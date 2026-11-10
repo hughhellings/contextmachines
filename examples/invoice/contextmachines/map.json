@@ -1,0 +1,352 @@
+{
+  "schemaVersion": "map-1",
+  "url": "http://localhost:3000/",
+  "learnedAt": "2026-11-10T10:46:02.817Z",
+  "product": "Invoice Demo is for people who bill clients: it keeps a client list, creates and sends invoices, exports reports as CSV, and connects online payment.",
+  "mainAction": {
+    "id": "invoice.create",
+    "label": "Save invoice",
+    "reason": "the AI's reading of the product: The product is named and built around invoices, and creating one is what a customer comes to do before sending it.",
+    "source": "ai"
+  },
+  "setupSteps": [
+    {
+      "action": "invoice.create",
+      "requires": "client.create",
+      "why": "The invoice form asks for a Client, so a client needs to be saved before an invoice can be created for it.",
+      "source": "ai"
+    }
+  ],
+  "journeys": [
+    {
+      "name": "Add a client",
+      "screens": [
+        "/dashboard",
+        "/clients/new"
+      ]
+    },
+    {
+      "name": "Create an invoice",
+      "screens": [
+        "/dashboard",
+        "/invoices/new"
+      ]
+    },
+    {
+      "name": "Connect online payments",
+      "screens": [
+        "/dashboard",
+        "/settings/payments"
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "path": "/dashboard",
+      "title": "Dashboard | Invoice Demo",
+      "headings": [
+        "Dashboard"
+      ],
+      "photo": "screens/dashboard.jpg"
+    },
+    {
+      "path": "/invoices/new",
+      "title": "New invoice | Invoice Demo",
+      "headings": [
+        "Create invoice"
+      ],
+      "photo": "screens/invoices_new-4f8957.jpg"
+    },
+    {
+      "path": "/invoices/:id",
+      "title": "Invoice 1 | Invoice Demo",
+      "headings": [
+        "Invoice INV-1"
+      ],
+      "photo": "screens/invoices_id-bd401b.jpg"
+    },
+    {
+      "path": "/",
+      "title": "Log in | Invoice Demo",
+      "headings": [
+        "Welcome back"
+      ],
+      "photo": "screens/home-42099b.jpg"
+    },
+    {
+      "path": "/clients/new",
+      "title": "New client | Invoice Demo",
+      "headings": [
+        "New client"
+      ],
+      "photo": "screens/clients_new-2727df.jpg"
+    },
+    {
+      "path": "/reports",
+      "title": "Reports | Invoice Demo",
+      "headings": [
+        "Reports"
+      ],
+      "photo": "screens/reports.jpg"
+    },
+    {
+      "path": "/settings/payments",
+      "title": "Payments | Invoice Demo",
+      "headings": [
+        "Get paid online"
+      ],
+      "photo": "screens/settings_payments-84d758.jpg"
+    }
+  ],
+  "actions": [
+    {
+      "id": "client.create",
+      "name": "Save client",
+      "does": "Stores a new client with its name, email, billing address and VAT number so it can be picked on an invoice.",
+      "onScreen": "Save client",
+      "kind": "save",
+      "request": "POST /api/clients",
+      "pages": [
+        "/clients/new"
+      ]
+    },
+    {
+      "id": "invoice.create",
+      "name": "Save invoice",
+      "does": "Creates an invoice for a chosen client with an amount and registration number.",
+      "onScreen": "Save invoice",
+      "kind": "save",
+      "request": "POST /api/invoices",
+      "pages": [
+        "/invoices/new"
+      ]
+    },
+    {
+      "id": "payment.connect",
+      "name": "Connect payments",
+      "does": "Links a payment account so that invoices can be paid online.",
+      "onScreen": "Connect payments",
+      "kind": "save",
+      "request": "POST /api/payments/connect",
+      "pages": [
+        "/settings/payments"
+      ]
+    },
+    {
+      "id": "report.export",
+      "name": "Export CSV",
+      "does": "Exports the report data as a CSV file.",
+      "onScreen": "Export CSV",
+      "kind": "save",
+      "request": "POST /api/reports/export",
+      "pages": [
+        "/reports"
+      ]
+    },
+    {
+      "id": "invoice.send",
+      "name": "Send invoice",
+      "does": "Sends an existing invoice to the client.",
+      "onScreen": "Send invoice",
+      "kind": "save",
+      "request": "POST /api/invoices/:id/send",
+      "pages": [
+        "/invoices/:id"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "kind": "does_nothing",
+      "screen": "/dashboard",
+      "target": "Import invoices",
+      "evidence": "nothing changed on screen, and no request, navigation or dialog followed",
+      "count": 1
+    }
+  ],
+  "predictions": [
+    {
+      "kind": "sign_in_first",
+      "screen": "/",
+      "target": "Welcome back",
+      "why": "The first screen asks people to sign in, and it saw no way to sign up or make an account, so someone new may have no way in."
+    },
+    {
+      "kind": "needs_setup_first",
+      "screen": "/invoices/new",
+      "target": "Save invoice",
+      "why": "\"Save invoice\" needs \"Save client\" done first (the invoice form asks for a Client, so a client needs to be saved before an invoice can be created for it), but the journey \"Create an invoice\" never passes New client, so people following it may get there too soon."
+    }
+  ],
+  "learner": {
+    "visited": 7,
+    "stoppedBy": "complete",
+    "savesStopped": 6,
+    "sentByPage": 0,
+    "savesWentThrough": false,
+    "seconds": 52,
+    "errors": [],
+    "stoppedFrom": {
+      "listed": 5,
+      "signIn": 1,
+      "background": 0
+    },
+    "stoppedAtDoor": true,
+    "standIn": {
+      "status": "no_adapter",
+      "message": "Nothing the stand-in user opened asked for a session it could answer, so only the public pages were learned.",
+      "reached": 0,
+      "notReached": [
+        {
+          "path": "/",
+          "why": "sign_in"
+        }
+      ],
+      "stoppedBy": "complete"
+    },
+    "wallOffer": "add-code",
+    "measured": 7,
+    "timing": {
+      "stages": {
+        "sign-in known": 6924,
+        "first item": 34340,
+        "browser ends": 39292,
+        "reading ends": 51684,
+        "review ends": 51684,
+        "last look ends": 51684
+      },
+      "scan": {
+        "load": 3717,
+        "read": 826,
+        "photo": 101,
+        "checks": 1601,
+        "forms": 13632,
+        "commands": 3499,
+        "buttons": 13013,
+        "public pass": 39184
+      },
+      "asks": [
+        {
+          "what": "You review a web product the way a person trying",
+          "model": "claude-opus-5-5",
+          "chars": 4648,
+          "ms": 7786,
+          "at": 39312,
+          "part": "review",
+          "tokens": {
+            "input": 2,
+            "cacheRead": 1589,
+            "cacheWrite": 1450,
+            "output": 624
+          }
+        },
+        {
+          "what": "You are a product analyst. You are given the fea",
+          "model": "claude-haiku-5-5",
+          "chars": 8333,
+          "ms": 12359,
+          "at": 39322,
+          "part": "review",
+          "tokens": {
+            "input": 2,
+            "cacheRead": 1200,
+            "cacheWrite": 3664,
+            "output": 2482
+          }
+        }
+      ]
+    },
+    "ai": {
+      "via": "your Claude Code sign-in",
+      "asks": 2,
+      "tokens": 11013,
+      "input": 4,
+      "cacheRead": 2789,
+      "cacheWrite": 5114,
+      "output": 3106,
+      "cached": 35,
+      "model": "claude-haiku-5-5",
+      "models": [
+        "claude-haiku-5-5",
+        "claude-opus-5-5"
+      ]
+    },
+    "review": {
+      "ran": true,
+      "screens": 7,
+      "raised": 1,
+      "kept": 1,
+      "dropped": {},
+      "seconds": 8
+    }
+  },
+  "fixes": [
+    {
+      "id": "does_nothing-e12f7b073d",
+      "status": "proven",
+      "from": "finding",
+      "kind": "does_nothing",
+      "title": "\"Import invoices\" does nothing when pressed",
+      "screen": "/dashboard",
+      "screens": [
+        "/dashboard"
+      ],
+      "evidence": [
+        "nothing changed on screen, and no request, navigation or dialog followed"
+      ],
+      "fix": "Wire this button to the action the product intends, or remove it: pressing it changed nothing and sent nothing.",
+      "where": {
+        "file": "index.html",
+        "line": 73,
+        "code": "html: `<h1>Dashboard</h1><div class=\"card\"><p>Create an invoice and send it to get paid.</p><button class=\"primary\" id=\"new\">New invoice</button><button id=\"import\">Import invoices</button></div>`,"
+      },
+      "photo": "screens/dashboard.jpg"
+    },
+    {
+      "id": "wait_for_value-7d3295f8dc",
+      "status": "predicted",
+      "from": "review",
+      "kind": "wait_for_value",
+      "title": "Every field, VAT number included, must be filled in before a first client can be saved.",
+      "screen": "/clients/new",
+      "screens": [
+        "/clients/new"
+      ],
+      "evidence": [
+        "On /clients/new: \"VAT number\""
+      ],
+      "quotes": [
+        {
+          "screen": "/clients/new",
+          "words": "VAT number"
+        }
+      ],
+      "fix": "Make VAT number and billing address optional on the new client form so a person can save a client with just a name and email and go straight to their first invoice.",
+      "where": {
+        "file": "index.html",
+        "line": 86,
+        "code": "<label>VAT number <input name=\"vat\" required></label>"
+      },
+      "photo": "screens/clients_new-2727df.jpg"
+    }
+  ],
+  "newUser": {
+    "status": "not_walked",
+    "message": "The app didn't take the new account's session, so nothing was seen as one.",
+    "screens": [],
+    "firstRun": [],
+    "notReached": []
+  },
+  "journeyWalk": {
+    "status": "not_walked",
+    "message": "Journeys weren't walked: they need the made-up user past the sign-in, and it didn't get past it this run.",
+    "legend": "Finished means the screens moved on with saves answered in the browser. It says nothing about your real server.",
+    "limitSeconds": 0,
+    "seconds": 0,
+    "journeys": [],
+    "notFinished": [],
+    "notReached": [],
+    "leftAlone": 0,
+    "looked": []
+  }
+}

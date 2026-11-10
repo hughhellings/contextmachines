@@ -1,0 +1,105 @@
+name: Release
+
+# A release is a tag, v1.2.3, on a commit whose CHANGELOG.md has a "## 1.2.3 - <date>" section.
+# It builds that version, tries the packed package as a user would, publishes it to npm with
+# Trusted Publishing (no npm token), makes the GitHub release from that CHANGELOG section, and
+# moves the Action's tag to it.
+#
+# The Action's tag is the one the README tells people to use, and it only moves within releases that
+# promise not to break them. While Context Machines is 0.x a minor may change the output, the options
+# and map.json, so the tag follows the minor: v0.1 (action@v0.1) moves with 0.1.1, 0.1.2 and so on,
+# and 0.2.0 starts v0.2, leaving v0.1 where it was. From 1.0.0 on it follows the major (v1). A
+# pre-release (1.2.0-rc.1) moves no tag.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # The GitHub release and the moved Action tag.
+      contents: write
+      # OIDC for npm Trusted Publishing and provenance.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: The tag matches the CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! grep -Eq "^## ${version//./\\.}( |$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## ${version}' section. Add one, then tag again."
+            exit 1
+          fi
+          if [ -f action/version.txt ] && [ "$(tr -d '[:space:]' < action/version.txt)" != "$version" ]; then
+            echo "::error::action/version.txt says $(cat action/version.txt), the tag says $version: the Action would run another version."
+            exit 1
+          fi
+          # The release notes: that section of the CHANGELOG, without its heading.
+          awk -v v="$version" '$0 ~ "^## " v "( |$)" { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          # The Action's tag for this version (see the top of this file): v0.<minor> while 0.x, then v<major>.
+          if [[ "$version" =~ ^0\.([0-9]+)\.[0-9]+$ ]]; then echo "ACTION_TAG=v0.${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          elif [[ "$version" =~ ^([1-9][0-9]*)\.[0-9]+\.[0-9]+$ ]]; then echo "ACTION_TAG=v${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          else echo "ACTION_TAG=" >> "$GITHUB_ENV"; fi
+
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build -- --version "$VERSION"
+      - name: Pack
+        run: |
+          cd cli/dist
+          npm pack --silent
+          echo "TARBALL=$PWD/contextmachines-$VERSION.tgz" >> "$GITHUB_ENV"
+
+      - name: Try the packed package
+        run: |
+          npx --yes "$TARBALL" --help
+          node examples/invoice/server.mjs &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/ > /dev/null && break; sleep 1; done
+          npx --yes "$TARBALL" learn http://localhost:3000 --ai none --minutes 1 --out "$RUNNER_TEMP/smoke"
+          test -s "$RUNNER_TEMP/smoke/PRODUCT.md"
+
+      - name: Publish to npm
+        run: |
+          # Trusted Publishing needs npm 11.5.1 or newer.
+          npm --version
+          # The first release is published by hand (npm takes a trusted publisher only for a package
+          # that's there): its tag still makes the GitHub release and moves the Action's tag.
+          if npm view "contextmachines@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::contextmachines@$VERSION is already on npm"
+          else
+            npm publish "$TARBALL" --access public
+          fi
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+
+      # Only forward: an older patch released late (0.1.3 after 0.1.4) must not move people back.
+      - name: Move the Action's tag
+        if: env.ACTION_TAG != ''
+        run: |
+          git fetch --tags --force --quiet
+          newest="$(git tag --list "${ACTION_TAG}.*" | grep -E "^${ACTION_TAG//./\\.}\.[0-9]+(\.[0-9]+)?$" | sort -V | tail -n 1)"
+          if [ "$newest" != "$GITHUB_REF_NAME" ]; then
+            echo "::notice::$GITHUB_REF_NAME isn't the newest release under $ACTION_TAG ($newest is), so $ACTION_TAG stays where it is."
+            exit 0
+          fi
+          git tag -f "$ACTION_TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$ACTION_TAG"

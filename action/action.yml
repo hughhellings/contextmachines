@@ -1,0 +1,128 @@
+name: Context Machines product diff
+description: >-
+  Learns your app at the addresses you give it (the pull request's preview deploy, and the app before
+  the change) and comments what the change does to the product: new provable issues, and screens and
+  actions added, gone, renamed or moved. It runs the published contextmachines package against those
+  URLs; it doesn't build or run the pull request's code. The job needs "pull-requests: write" to
+  comment (on a pull request from a fork the token is read-only, so the result goes to the job
+  summary only).
+branding:
+  icon: map
+  color: blue
+
+inputs:
+  url:
+    description: >-
+      The app after this change (usually the pull request's preview deploy). A user name and password
+      or a bypass token in it is used to get in, and left out of the comment, the job summary and the
+      Action's own log lines; keep it in a secret so GitHub masks it in the step's header too.
+    required: true
+  base-url:
+    description: The app before this change (production, or the main branch's preview). Without it, the comment describes the product as it stands.
+    required: false
+    default: ""
+  anthropic-api-key:
+    description: Optional. With it, actions are named in plain English and the product is described; an unchanged product reuses its last reading.
+    required: false
+    default: ""
+  minutes:
+    description: How long to explore each version, 1 to 30.
+    required: false
+    default: "3"
+  fail-on-new-issues:
+    description: '"true" fails the job when the change brings new issues (without base-url, any issue). The comment is still written first.'
+    required: false
+    default: "false"
+  comment:
+    description: Comment on the pull request ("false" for the job summary only).
+    required: false
+    default: "true"
+  key:
+    description: >-
+      Tells several uses of the Action in one job apart (two apps, or the legs of a matrix): each key
+      keeps its own comment, work dir and artifact. Letters, digits, ".", "-" and "_".
+    required: false
+    default: ""
+  github-token:
+    description: >-
+      Token used to comment, and only that: the learner never sees it. The job needs
+      "permissions: pull-requests: write". Only a comment this token's identity wrote is edited.
+    required: false
+    default: ${{ github.token }}
+  artifact:
+    description: >-
+      Upload each run's PRODUCT.md, map.json and screen photos as a workflow artifact, linked from the
+      comment ("false" to keep them off GitHub). Anyone who can read the repository's Actions runs can
+      download it.
+    required: false
+    default: "true"
+  work-dir:
+    description: Where each run's PRODUCT.md, map.json and screen photos are written (default the runner's temp directory).
+    required: false
+    default: ""
+  cli:
+    description: >-
+      Path to a contextmachines CLI to run instead of the published package, with its dependencies and
+      browser already installed. For testing Context Machines itself; leave it empty.
+    required: false
+    default: ""
+
+outputs:
+  changed:
+    description: '"true" when the change alters the product''s screens, actions, journeys or issues, "false" when it doesn''t, and empty without base-url (nothing to compare with).'
+    value: ${{ steps.run.outputs.changed }}
+  issues:
+    description: The number of new issues the change brings (without base-url, every issue found).
+    value: ${{ steps.run.outputs.issues }}
+  map:
+    description: Path to the map.json of the app after the change.
+    value: ${{ steps.run.outputs.map }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        # The Action installs nothing from the repository it runs in, so there is nothing of it to cache.
+        package-manager-cache: false
+    # The browser the package's own Playwright drives: `--package` puts that Playwright's command on
+    # the path, so the two can't drift apart. Run from the temp directory, so the repository's own
+    # package.json can't change what npx fetches.
+    - name: Install Context Machines and its browser
+      if: inputs.cli == ''
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      run: npx --yes --package="contextmachines@$(cat "$GITHUB_ACTION_PATH/version.txt")" -- playwright install --with-deps chromium
+    - name: Keep the AI reading between runs
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/contextmachines-reading-${{ inputs.key }}
+        key: contextmachines-reading-${{ github.job }}-${{ inputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: contextmachines-reading-${{ github.job }}-${{ inputs.key }}-
+    - id: run
+      name: Learn and compare
+      shell: bash
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_MINUTES: ${{ inputs.minutes }}
+        INPUT_FAIL_ON_NEW_ISSUES: ${{ inputs.fail-on-new-issues }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_ARTIFACT: ${{ inputs.artifact }}
+        INPUT_WORK_DIR: ${{ inputs.work-dir }}
+        INPUT_CLI: ${{ inputs.cli }}
+        INPUT_READING_CACHE: ${{ runner.temp }}/contextmachines-reading-${{ inputs.key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: node "$GITHUB_ACTION_PATH/run.ts"
+    # Also after a failed run (what it learned so far is in there), so the comment's link has something behind it.
+    - name: Keep the screen photos
+      if: ${{ !cancelled() && inputs.artifact != 'false' && steps.run.outputs.work-dir != '' }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: contextmachines-${{ github.job }}${{ inputs.key && format('-{0}', inputs.key) || '' }}
+        path: ${{ steps.run.outputs.work-dir }}
+        if-no-files-found: ignore
+        overwrite: true

@@ -1,0 +1,21 @@
+{
+  "name": "@contextmachines/cli",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "contextmachines": "./bin.mjs"
+  },
+  "scripts": {
+    "test": "node --test report.test.ts predictions.test.ts understand.test.ts init.test.ts",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "playwright": "1.61.0",
+    "zod": "^4.6.7",
+    "@contextmachines/scanner": "0.0.0",
+    "@contextmachines/schemas": "0.0.0"
+  }
+}

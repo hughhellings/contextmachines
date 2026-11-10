@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/hughhellings/contextmachines/security/advisories/new
+    about: Report it privately. SECURITY.md says what counts and how fast we answer.
+  - name: Questions
+    url: https://github.com/hughhellings/contextmachines/discussions
+    about: How to use it, and whether something is expected.

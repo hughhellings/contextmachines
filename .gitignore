@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tgz
+# What a run of contextmachines writes, when it is tried in this folder
+/contextmachines/
+.session.json
+.reading.json
+.DS_Store

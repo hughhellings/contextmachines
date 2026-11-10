@@ -1,0 +1,67 @@
+name: Bug report
+description: contextmachines crashed, stopped early, or wrote something it shouldn't.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A finding that is wrong, or one it missed, has its own form: "A finding is wrong or missing".
+        Security problems go to [SECURITY.md](https://github.com/hughhellings/contextmachines/blob/main/SECURITY.md), not here.
+
+        Output from a run can hold the site's own text and addresses. **Redact anything you wouldn't post in public** before pasting it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: The command you ran, with the address redacted if it isn't public.
+      placeholder: npx contextmachines learn https://app.example.com --minutes 3
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `npx contextmachines --version`, your Node version (`node --version`) and operating system.
+      placeholder: "contextmachines 0.1.0, node 24.11.0, macOS 26"
+    validations:
+      required: true
+  - type: dropdown
+    id: public
+    attributes:
+      label: Is the site public?
+      description: A public address lets us run it ourselves, which is the fastest way to a fix.
+      options:
+        - "Yes, the address is in the command above"
+        - "No, it's private or behind a sign-in"
+    validations:
+      required: true
+  - type: dropdown
+    id: ai
+    attributes:
+      label: AI
+      description: Which AI read the product (the line under the first one it prints says).
+      options:
+        - none (--ai none)
+        - Anthropic API
+        - OpenAI API
+        - Google Gemini API
+        - Vercel AI Gateway
+        - OpenRouter
+        - Ollama or another OpenAI-compatible server
+        - Claude Code sign-in
+        - Codex sign-in
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: What it printed. With `CONTEXTMACHINES_DEBUG=1` an unexpected error prints in full. Redacted, please.
+      render: text

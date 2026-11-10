@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Demo</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --text: #1d1f24; --muted: #646a75; --border: #dde0e6; --accent: #3c5bd8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; gap: 20px; align-items: center; padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header strong { margin-right: 12px; }
+  header a { color: var(--muted); text-decoration: none; }
+  header a[aria-current="page"] { color: var(--text); font-weight: 600; }
+  main { max-width: 720px; margin: 28px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); cursor: pointer; margin-top: 14px; margin-right: 8px; display: inline-block; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .muted { color: var(--muted); }
+  .hint { font-size: 12px; color: #a3a7af; }
+  .status { font-size: 12px; color: #a3a7af; margin-top: 8px; min-height: 1em; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <strong>Invoice Demo</strong>
+  <a href="/dashboard" data-nav>Dashboard</a>
+  <a href="/clients/new" data-nav>Clients</a>
+  <a href="/invoices/new" data-nav>New invoice</a>
+  <a href="/reports" data-nav>Reports</a>
+  <a href="/settings/payments" data-nav>Settings</a>
+  <!--changed:nav-->
+</header>
+<main id="app"></main>
+<script>
+/*
+ * A small invoicing app to try Context Machines on. It is a single-page app (history.pushState
+ * routing), the way most products are built, and it has the problems real products ship with:
+ *   - "Import invoices" on the dashboard does nothing when pressed
+ *   - "Reg. no." on the invoice form is required, and nothing says what it is
+ *   - "Send invoice" fails until payments are connected, and says so only faintly
+ * server.mjs serves it; with --changed it serves the same app after a small change.
+ */
+const CHANGED = document.documentElement.dataset.changed === "yes";
+const api = (path, body) => fetch(path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+const app = document.getElementById("app");
+const go = (path) => { history.pushState({}, "", path); render(); };
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-nav]");
+  if (a) { e.preventDefault(); go(a.getAttribute("href")); }
+});
+addEventListener("popstate", render);
+
+const exportCard = `<div class="card"><p>Every invoice and payment, as a spreadsheet.</p><button id="export">Export CSV</button><div class="status" id="status"></div></div>`;
+const wireExport = () => (document.getElementById("export").onclick = async () => {
+  const res = await api("/api/reports/export", {});
+  document.getElementById("status").textContent = res.ok ? "Exported." : "Couldn't export.";
+});
+
+const pages = {
+  "/login": () => ({
+    title: "Log in",
+    html: `<h1>Welcome back</h1><form class="card" id="f"><label>Email <input name="email" type="email" required></label><label>Password <input name="password" type="password" required></label><button class="primary">Log in</button></form>`,
+    wire: () => form("f", async () => { await api("/api/auth/login", {}); go("/dashboard"); }),
+  }),
+  "/dashboard": () => ({
+    title: "Dashboard",
+    html: `<h1>Dashboard</h1><div class="card"><p>Create an invoice and send it to get paid.</p><button class="primary" id="new">New invoice</button><button id="import">Import invoices</button></div>`,
+    wire: () => {
+      document.getElementById("new").onclick = () => go("/invoices/new");
+      // Looks like it works, does nothing: the kind of issue Context Machines proves.
+      document.getElementById("import").onclick = () => {};
+    },
+  }),
+  "/clients/new": () => ({
+    title: "New client",
+    html: `<h1>New client</h1><form class="card" id="f">
+      <label>Name <input name="name" required></label>
+      <label>Email <input name="client_email" type="email" required></label>
+      <label>Billing address <input name="address" required></label>
+      <label>VAT number <input name="vat" required></label>
+      <button class="primary">Save client</button></form>`,
+    wire: () => form("f", async () => { await api("/api/clients", {}); go("/invoices/new"); }),
+  }),
+  "/invoices/new": () => ({
+    title: "New invoice",
+    html: `<h1>Create invoice</h1><form class="card" id="f">
+      <label>Client <select name="client" required><option value="">Choose…</option><option>Acme Ltd</option><option>Globex</option></select></label>
+      <label>Amount <input name="amount" type="number" min="1" required></label>
+      <label>Reg. no. <input name="reg_no" required></label><span class="hint">ref</span>
+      <button class="primary">Save invoice</button></form>`,
+    wire: () => form("f", async () => { const r = await api("/api/invoices", {}); const { id } = await r.json(); go(`/invoices/${id}`); }),
+  }),
+  "/invoices/:id": (id) => ({
+    title: `Invoice ${id}`,
+    html: `<h1>Invoice INV-${id}</h1><div class="card"><table><tr><th>Status</th><td id="state">Draft</td></tr></table>
+      <button class="primary" id="send">${CHANGED ? "Email invoice" : "Send invoice"}</button>${CHANGED ? `<button id="duplicate">Duplicate invoice</button>` : ""}
+      <div class="status" id="status"></div></div>`,
+    wire: () => {
+      document.getElementById("send").onclick = async () => {
+        const r = await api(`/api/invoices/${id}/send`, {});
+        document.getElementById("status").textContent = r.ok ? "" : "Couldn't send.";
+        if (r.ok) document.getElementById("state").textContent = "Sent";
+      };
+      if (CHANGED) document.getElementById("duplicate").onclick = async () => { const r = await api(`/api/invoices/${id}/duplicate`, {}); const { id: copy } = await r.json(); go(`/invoices/${copy}`); };
+    },
+  }),
+  "/settings/payments": () => ({
+    title: "Payments",
+    html: `<h1>Get paid online</h1><form class="card" id="f"><p class="muted">Connect a bank account so clients can pay invoices.</p>
+      <label>Account number <input name="account" required></label><button class="primary">Connect payments</button><div class="status" id="status"></div></form>`,
+    wire: () => form("f", async () => { await api("/api/payments/connect", {}); document.getElementById("status").textContent = "Connected."; }),
+  }),
+  "/reports": () => ({
+    title: "Reports",
+    html: `<h1>Reports</h1><div class="card"><p>Paid this month: <strong>£0</strong></p><p class="muted">Send invoices to see payments here.</p></div>${CHANGED ? "" : exportCard}`,
+    wire: () => { if (!CHANGED) wireExport(); },
+  }),
+  ...(CHANGED ? {
+    "/settings/exports": () => ({ title: "Exports", html: `<h1>Exports</h1>${exportCard}`, wire: wireExport }),
+  } : {}),
+};
+
+function form(id, onSubmit) {
+  document.getElementById(id).addEventListener("submit", (e) => { e.preventDefault(); onSubmit(); });
+}
+
+function render() {
+  const path = location.pathname === "/" ? "/login" : location.pathname;
+  const invoice = path.match(/^\/invoices\/(\d+)$/);
+  const page = invoice ? pages["/invoices/:id"](invoice[1]) : (pages[path] || pages["/dashboard"])();
+  document.title = `${page.title} | Invoice Demo`;
+  app.innerHTML = page.html;
+  page.wire();
+  for (const a of document.querySelectorAll("a[data-nav]")) a.toggleAttribute("aria-current", a.getAttribute("href") === path);
+  for (const a of document.querySelectorAll("a[data-nav][aria-current]")) a.setAttribute("aria-current", "page");
+}
+render();
+</script>
+</body>
+</html>

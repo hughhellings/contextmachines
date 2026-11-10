@@ -1,0 +1,25 @@
+# Copy to .github/workflows/contextmachines.yml. On every pull request it learns your app before
+# and after the change, and keeps one comment on the pull request saying what the change does to
+# the product: screens and actions added, gone, renamed or moved, and issues new or fixed.
+name: Product diff
+on: pull_request
+
+permissions:
+  contents: read
+  # To write the comment. On a pull request from a fork the token is read-only, so the result
+  # goes to the job summary only.
+  pull-requests: write
+
+jobs:
+  contextmachines:
+    runs-on: ubuntu-latest
+    steps:
+      # v0.1 moves to each 0.1.x patch and never to 0.2, which may change the comment or the inputs.
+      - uses: hughhellings/contextmachines/action@v0.1
+        with:
+          # The app after this change: usually the pull request's preview deploy.
+          url: https://pr-${{ github.event.number }}.preview.yourapp.com
+          # The app before it: production, or the main branch's preview.
+          base-url: https://yourapp.com
+          # Optional: with it, actions are named in plain English and the product is described.
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
