@@ -253,6 +253,12 @@ export function pickAi(choice: string | undefined, model: string | undefined): A
   if (choice !== undefined && !(AI_CHOICES as readonly string[]).includes(choice)) throw new Error(`--ai must be one of: ${AI_CHOICES.join(", ")}`);
   const want = choice as Choice | undefined;
   if (want === "none") return undefined;
+  // Nothing chosen: a signed-in agent comes first, as init lists them, so a key left in the shell
+  // never bills per token for a run your plan would have covered.
+  if (!want && AGENTS_SUPPORTED) {
+    if (installed("claude")) return model ? claudeCode(model) : withLight(claudeCode(undefined), claudeCode("haiku", "low"));
+    if (installed("codex")) return codex(model);
+  }
   if (want === "anthropic" || (!want && process.env.ANTHROPIC_API_KEY)) {
     if (!process.env.ANTHROPIC_API_KEY) throw new Error("--ai anthropic needs ANTHROPIC_API_KEY");
     return model ? anthropic(model) : withLight(anthropic("claude-opus-5-5"), anthropic("claude-haiku-5-5"));
@@ -550,11 +556,19 @@ export function failure(command: "claude" | "codex", code: number | null, err: s
     const said = (last.match(/"message":\s*"([^"]+)"/)?.[1] ?? last.match(/"detail":\s*"([^"]+)"/)?.[1] ?? last.replace(/^ERROR:\s*/, "")).trim() || `exit ${code}`;
     if (MODEL_REFUSED.test(errors)) {
       const name = said.match(/model\s+[`'"]([^`'"\s]+)[`'"]|[`'"]([^`'"\s]+)[`'"]\s+model/)?.slice(1).find(Boolean) ?? codexHeader(err).match(/^model: *(\S+)/m)?.[1];
-      return `codex can't use ${name ? `the model "${name.slice(0, 60)}"` : "its model"}: pass --model with one your plan has`;
+      return `codex can't use ${name ? `the model "${name.slice(0, 60)}"` : "its model"}: pass --model with one your plan has, or save it as "model" in contextmachines.config.json`;
     }
     return `codex: ${said.slice(0, 200)}${SIGN_IN.test(errors) ? ` (${SIGN_IN_HINT.codex})` : ""}`;
   }
-  const said = (err.match(/"message":"([^"]+)"/)?.[1] ?? err.trim().split("\n").pop() ?? out.trim().slice(0, 200)) || `exit ${code}`;
+  // Claude Code says why on stdout, as its JSON reply's result ("Failed to authenticate: …"), with nothing on stderr.
+  let result: string | undefined;
+  try {
+    const reply = JSON.parse(out) as { result?: unknown };
+    if (typeof reply.result === "string" && reply.result.trim()) result = reply.result.trim();
+  } catch {
+    // not its JSON: what's below
+  }
+  const said = (err.match(/"message":"([^"]+)"/)?.[1] ?? result ?? (err.trim().split("\n").pop() || out.trim().slice(0, 200))) || `exit ${code}`;
   return `${command}: ${said.slice(0, 200)}${SIGN_IN.test(`${err}\n${out}`) ? ` (${SIGN_IN_HINT[command]})` : ""}`;
 }
 

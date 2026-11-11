@@ -7,14 +7,14 @@ node examples/invoice/server.mjs                                  # http://local
 npx contextmachines learn http://localhost:3000
 ```
 
-[contextmachines/](contextmachines) is what that run wrote, with a Claude Code sign-in for the AI reading. Yours uses whichever AI init set up (a Claude Code or Codex sign-in, an API key, or none). It wrote:
+[contextmachines/](contextmachines) is what that run wrote, with a Claude Code sign-in for the AI reading. Yours uses the AI you set with `init` or `--ai`, otherwise the first you have: a Claude Code or Codex sign-in, then an API key; `--ai none` uses none. It wrote:
 
 - [FIX.md](contextmachines/FIX.md): what to fix, with its evidence, where to change it, and what to do
 - [PRODUCT.md](contextmachines/PRODUCT.md): what it's for, the main action, setup steps, journeys, every screen and action, and the one issue it could prove ("Import invoices" does nothing when pressed)
 - [map.json](contextmachines/map.json): the same, as data
 - [screens/](contextmachines/screens): a photo of each screen
 
-It proves the dead button with no AI: pressing it changed nothing and sent nothing. The predicted items come from the AI's reading, so what it predicts may vary a little from run to run, and yours may not match the files here exactly.
+It proves the dead button with no AI: pressing it changed nothing and sent nothing. This small app shows the proven path only: anyone can open every screen and there's no sign-up, so there was no sign-in to get past and no new account to walk, and the AI predicted nothing. On an app that has them, predicted items come from the AI's reading and may vary a little from run to run.
 
 ![The dashboard, as the run photographed it](contextmachines/screens/dashboard.jpg)
 

@@ -58,6 +58,8 @@ const USAGE = [
 export interface ProjectConfig {
   url?: string;
   ai?: string;
+  /** The model that AI uses, as --model takes it: for a plan that can't use the AI's own default. */
+  model?: string;
   /** The person said yes to their chosen AI reading their code, at a sign-in, on their local address. */
   readCode?: boolean;
   /** The app's folder, when it isn't the one init ran in. */
@@ -78,8 +80,8 @@ export function readProjectConfig(dir: string = process.cwd()): ProjectConfig {
     throw new Error(`${CONFIG_FILE} isn't valid JSON`);
   }
   if (!saved || typeof saved !== "object" || Array.isArray(saved)) throw new Error(`${CONFIG_FILE} should be a JSON object`);
-  const { url, ai, readCode, app } = saved as Record<string, unknown>;
-  return { ...(typeof url === "string" ? { url } : {}), ...(typeof ai === "string" ? { ai } : {}), ...(typeof readCode === "boolean" ? { readCode } : {}), ...(typeof app === "string" ? { app } : {}) };
+  const { url, ai, model, readCode, app } = saved as Record<string, unknown>;
+  return { ...(typeof url === "string" ? { url } : {}), ...(typeof ai === "string" ? { ai } : {}), ...(typeof model === "string" && model.trim() ? { model: model.trim() } : {}), ...(typeof readCode === "boolean" ? { readCode } : {}), ...(typeof app === "string" ? { app } : {}) };
 }
 
 /** A new address for the project: only that key changes, and a file that can't be read is left alone. */
@@ -161,9 +163,11 @@ const LIVE_PROBES: Probes = {
   },
   installBrowser: (stop) =>
     new Promise((done) => {
-      const [command, ...args] = browserCommand().split(" ") as [string, ...string[]];
-      // npx is a .cmd on Windows, which Node only starts through a shell. These are all fixed words.
-      const child = spawn(command, args, { stdio: "ignore", signal: stop, shell: process.platform === "win32" });
+      // Playwright's own installer, from the copy this runs with, by Node: not through npx, which under
+      // `npx contextmachines` inherits that npx's npm_config_call and runs contextmachines again.
+      const cli = playwrightCli();
+      if (!cli) return done(false);
+      const child = spawn(process.execPath, [cli, "install", "chromium"], { stdio: "ignore", signal: stop });
       child.on("error", () => done(false));
       child.on("close", (code) => done(code === 0));
     }),
@@ -176,6 +180,18 @@ const LIVE_PROBES: Probes = {
   listeners,
   startDev: (project, stop) => startDev(project, LIVE_PROBES.reachable, stop),
 };
+
+/** The command line of the Playwright this runs with, which downloads the browser that copy can use. */
+function playwrightCli(): string | undefined {
+  try {
+    const require = createRequire(import.meta.url);
+    const manifest = require.resolve("playwright/package.json");
+    const bin = (require(manifest) as { bin?: Record<string, string> }).bin?.playwright ?? "cli.js";
+    return join(dirname(manifest), bin);
+  } catch {
+    return undefined;
+  }
+}
 
 /** The download for the Playwright this runs with: a bare `npx playwright` may fetch another version, whose browser this one can't use. */
 export function browserCommand(): string {

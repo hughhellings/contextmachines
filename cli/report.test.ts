@@ -2083,12 +2083,12 @@ describe("FIX.md, PRODUCT.md and report.html, read by someone new", () => {
   it("says every screen opened without signing in, rather than that only the public part was learned", () => {
     const open = { ...base, fixes: [], learner: { ...base.learner!, stoppedAtDoor: true, wallOffer: "add-code" as const, standIn: { status: "no_adapter", message: "Nothing the stand-in user opened asked for a session it could answer, so only the public pages were learned.", reached: 0, notReached: [] } } };
     const text = fixDoc(open, at);
-    assert.match(text, /^- All 2 screens it found opened without signing in\.$/m);
+    assert.match(text, /^- All 2 screens besides the sign-in opened without signing in\.$/m);
     assert.doesNotMatch(text, /only the public pages|--code/);
-    assert.match(reportPage(open, at), /All 2 screens it found opened without signing in\./);
+    assert.match(reportPage(open, at), /All 2 screens besides the sign-in opened without signing in\./);
     assert.equal(shortOfWhole(open), undefined, "and the run's end has nothing to warn about");
     assert.match(shortOfWhole({ ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, status: "unknown_provider" } } }) ?? "", /only the public pages/);
-    assert.equal(allOpenWords({ ...open, screens: [...open.screens, { path: "/login", title: "Log in", headings: [] }] }), "All 2 screens it found opened without signing in.", "the sign-in itself isn't counted");
+    assert.equal(allOpenWords({ ...open, screens: [...open.screens, { path: "/login", title: "Log in", headings: [] }] }), "All 2 screens besides the sign-in opened without signing in.", "the sign-in itself isn't counted");
     assert.equal(allOpenWords({ ...open, screens: [...open.screens, { path: "/x", title: null, headings: [], seenWith: "stand-in" }] }), undefined, "something was only seen with a session");
     assert.equal(allOpenWords({ ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, status: "server_auth" } } }), undefined, "the server keeps something behind the sign-in");
     const unknown = { ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, status: "unknown_provider", message: "The stand-in user doesn't know the sign-in library \"acme-auth\", so only the public pages were learned." } } };
@@ -2096,7 +2096,7 @@ describe("FIX.md, PRODUCT.md and report.html, read by someone new", () => {
     assert.match(fixDoc(unknown, at), /doesn't know the sign-in library/);
     assert.equal(allOpenWords({ ...open, learner: { ...open.learner, standIn: { ...open.learner.standIn, notReached: [{ path: "/admin", why: "no_access" }] } } }), undefined, "a screen it couldn't open");
     const atLogIn = { ...open, screens: [...open.screens, { path: "/", title: "Log in | Demo", headings: [] }], learner: { ...open.learner, standIn: { ...open.learner.standIn, notReached: [{ path: "/", why: "sign_in" as const }] } } };
-    assert.equal(allOpenWords(atLogIn), "All 2 screens it found opened without signing in.", "held at the sign-in form itself isn't a screen kept from it");
+    assert.equal(allOpenWords(atLogIn), "All 2 screens besides the sign-in opened without signing in.", "held at the sign-in form itself isn't a screen kept from it");
     assert.equal(allOpenWords({ ...atLogIn, learner: { ...atLogIn.learner, standIn: { ...atLogIn.learner.standIn, notReached: [{ path: "/billing", why: "sign_in" as const }] } } }), undefined, "a product screen that asked for a sign-in");
   });
 

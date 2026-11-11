@@ -1,7 +1,7 @@
 // Which model gets which ask, and what happens when the small one can't answer.
 //   node --test cli/ai.test.ts
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -39,6 +39,30 @@ describe("the small model", () => {
     }));
     await assert.rejects(ai.light!.ask("s", "q", {}), /429/);
     assert.deepEqual(main.asked, []);
+  });
+
+  it("with nothing chosen, is a signed-in agent before a key left in the shell", { skip: process.platform === "win32" }, () => {
+    const saved = { PATH: process.env.PATH, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, OPENAI_API_KEY: process.env.OPENAI_API_KEY };
+    const bin = mkdtempSync(join(tmpdir(), "contextmachines-agents-"));
+    try {
+      process.env.ANTHROPIC_API_KEY = "a-key-for-this-test";
+      process.env.OPENAI_API_KEY = "another-key-for-this-test";
+      for (const agent of ["claude", "codex"]) {
+        writeFileSync(join(bin, agent), "#!/bin/sh\n");
+        chmodSync(join(bin, agent), 0o755);
+      }
+      process.env.PATH = bin;
+      assert.match(pickAi(undefined, undefined)!.via, /Claude Code/);
+      rmSync(join(bin, "claude"));
+      assert.match(pickAi(undefined, undefined)!.via, /Codex/);
+      rmSync(join(bin, "codex"));
+      assert.doesNotMatch(pickAi(undefined, undefined)!.via, /Claude Code|Codex/);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 
   it("is what's used unless a model was named, which then answers everything", () => {
@@ -157,12 +181,13 @@ describe("an agent's own words", () => {
   });
   it("says when Codex can't use the model, and to pass --model, not to sign in", () => {
     const refused = 'ERROR: {"detail":"The \'gpt-5.5\' model is not supported when using Codex with a ChatGPT account."}';
-    assert.equal(failure("codex", 1, codexErr(refused, "gpt-5.5"), "", QUESTION), 'codex can\'t use the model "gpt-5.5": pass --model with one your plan has');
+    assert.equal(failure("codex", 1, codexErr(refused, "gpt-5.5"), "", QUESTION), 'codex can\'t use the model "gpt-5.5": pass --model with one your plan has, or save it as "model" in contextmachines.config.json');
     const coded = 'ERROR: unexpected status 404 Not Found: {"error":{"message":"Model unavailable","type":"invalid_request_error","code":"model_not_found"}}';
-    assert.equal(failure("codex", 1, codexErr(coded, "o9"), "", QUESTION), 'codex can\'t use the model "o9": pass --model with one your plan has', "named from its header");
+    assert.equal(failure("codex", 1, codexErr(coded, "o9"), "", QUESTION), 'codex can\'t use the model "o9": pass --model with one your plan has, or save it as "model" in contextmachines.config.json', "named from its header");
   });
   it("still gives Claude Code's sign-in hint, from what it said on either stream", () => {
-    assert.equal(failure("claude", 1, "", '{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}'), 'claude: exit 1 (run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY)');
+    assert.equal(failure("claude", 1, "", '{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}'), "claude: Not logged in · Please run /login (run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY)", "its own reason, from its JSON reply");
+    assert.equal(failure("claude", 1, "", '{"is_error":true,"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}'), "claude: Failed to authenticate: OAuth session expired and could not be refreshed (run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY)");
     assert.equal(failure("claude", 1, 'API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}', ""), "claude: invalid x-api-key (run claude and sign in, or use --ai anthropic with ANTHROPIC_API_KEY)");
     assert.equal(failure("claude", 1, "something broke", ""), "claude: something broke");
   });

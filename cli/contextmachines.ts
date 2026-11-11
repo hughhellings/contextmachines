@@ -391,6 +391,9 @@ if (str("session") && !existsSync(str("session")!)) fail(`There's no saved sign-
 if (flag("login") && str("session")) fail("Use --login to sign in now, or --session to reuse a saved sign-in: not both.", EXIT.usage);
 if (flag("code") && flag("no-code")) fail("Use --code to read the code for this run, or --no-code not to: not both.", EXIT.usage);
 const aiChoice = str("ai") ?? projectConfig.ai;
+// The model the same way: --model wins, then the one saved beside the AI. A model saved for one AI
+// isn't carried to another named on the command line.
+const modelChoice = str("model") ?? (str("ai") && str("ai") !== projectConfig.ai ? undefined : projectConfig.model);
 if (aiChoice !== undefined && !(AI_CHOICES as readonly string[]).includes(aiChoice)) {
   const near = suggest(aiChoice, AI_CHOICES);
   fail(`There's no AI called "${aiChoice}".${near ? ` Did you mean "${near}"?` : ""} --ai takes ${AI_CHOICES.join(", ")}.`, EXIT.usage);
@@ -400,7 +403,7 @@ if (flag("login") && !process.stdin.isTTY) fail("--login needs a terminal, to si
 // Which AI reads it: the one asked for, or the first the person already has.
 let ai: Ai | undefined;
 try {
-  ai = pickAi(aiChoice, str("model"));
+  ai = pickAi(aiChoice, modelChoice);
 } catch (error) {
   fail(firstLine(error), EXIT.usage);
 }
@@ -1407,7 +1410,7 @@ if (menuShown) {
         say(`  ${c.grey(`starting ${AGENT_NAMES[offer.agent!]} with:`)}`);
         for (const line of wrapTo(prompt, Math.max(20, Math.min(cols, 100) - 4))) say(`    ${line}`);
         say();
-        return startAgent(offer.agent!, prompt, { model: str("model") });
+        return startAgent(offer.agent!, prompt, { model: modelChoice });
       },
     },
     failed: (key, error) => say(`  ${c.yellow("!")} ${key === "c" ? "couldn't copy it" : key === "o" ? "couldn't open it" : "couldn't do that"}: ${safe(firstLine(error))}`),

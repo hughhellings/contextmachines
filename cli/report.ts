@@ -1340,7 +1340,7 @@ function pageHead(map: ProductMap, start: URL, esc: (v: unknown) => string): str
   // Every part escaped, the count put in bold after: no part of the line is ever trusted as markup.
   const parts = [whenWords(map.learnedAt), l ? duration(l.seconds * 1000) : "", problemWords(map), aiWords(l)].filter(Boolean).map((p) => (p === problemWords(map) ? `<b>${esc(p)}</b>` : esc(p)));
   // The biggest gaps on the line itself, so a short count isn't read as an app looked at all over.
-  const gaps = [...(l?.signInFirst || l?.stoppedAtDoor ? ["public pages only: sign-in not passed"] : []), ...(l && l.stoppedBy !== "complete" ? [STOPPED[l.stoppedBy] ?? "stopped short"] : [])];
+  const gaps = [...((l?.signInFirst || l?.stoppedAtDoor) && !allOpenWords(map) ? ["public pages only: sign-in not passed"] : []), ...(l && l.stoppedBy !== "complete" ? [STOPPED[l.stoppedBy] ?? "stopped short"] : [])];
   const files = [FIX_FILE, "map.json", "PRODUCT.md", ...(referredPhotos(map).length ? ["screens/"] : [])].map((f) => `<a href="${f}">${f}</a>`).join(" ");
   const walk = map.journeyWalk?.status === "walked" ? map.journeyWalk : undefined;
   const finished = walk ? walk.journeys.filter((j) => j.outcome === "finished" && !j.fromCode).length : 0;
@@ -1456,11 +1456,11 @@ function notCheckedHtml(map: ProductMap, esc: (v: unknown) => string): string {
     ...(readingNote(map) ? [plain(readingNote(map))] : []),
     ...(l?.signInFirst || l?.stoppedAtDoor ? [allOpenWords(map) ?? `${esc(signInWords(map))}${l.standIn && l.standIn.status !== "reached" ? ` ${esc(badgeWords(l.standIn.message))}` : ""}${nextHtml(wallNext(map), esc)}`] : []),
     ...(limitNote(map) ? [plain(limitNote(map))] : []),
-    ...(l?.standIn?.notReached.length ? [`Screens the made-up user couldn't open: ${paths(l.standIn.notReached)}`] : []),
-    ...(map.newUser && map.newUser.status !== "walked" ? [`No new account was walked: ${esc(map.newUser.message)}`] : []),
+    ...(l?.standIn?.notReached.length && !allOpenWords(map) ? [`Screens the made-up user couldn't open: ${paths(l.standIn.notReached)}`] : []),
+    ...(noSignUpWords(map) ? [esc(noSignUpWords(map))] : map.newUser && map.newUser.status !== "walked" ? [`No new account was walked: ${esc(map.newUser.message)}`] : []),
     ...(map.newUser?.notReached.length ? [`Screens a new account couldn't open: ${paths(map.newUser.notReached)}`] : []),
     ...(map.fromCode?.coverage.screensSkipped.length ? [`Screens the code read couldn't read: ${map.fromCode.coverage.screensSkipped.slice(0, 12).map((s) => `<code>${esc(s.path)}</code>`).join(", ")}${map.fromCode.coverage.screensSkipped.length > 12 ? `, and ${map.fromCode.coverage.screensSkipped.length - 12} more in map.json` : ""}`] : []),
-    ...journeysNotDone(map, esc),
+    ...(noSignUpWords(map) ? [] : journeysNotDone(map, esc)),
     ...(review && !review.ran ? [`The AI didn't review the screens: ${esc(REVIEW_FAILED[review.why ?? "failed"] ?? "it didn't run")}. Only measured items are listed.`] : []),
     ...(review?.ran && Object.keys(review.dropped).length ? [esc(droppedWords(Object.values(review.dropped).reduce((a, b) => a + b, 0)))] : []),
     `Issues it looks for: ${esc(ISSUES_CHECKED.replace(/^Only /, "only "))}`,
@@ -2239,7 +2239,20 @@ export function allOpenWords(map: Pick<ProductMap, "screens" | "learner">): stri
   if (standIn?.status !== "no_adapter" || kept?.length || map.screens.some((s) => s.seenWith)) return undefined;
   const n = map.screens.filter((s) => !signIn(s)).length;
   if (!n) return undefined;
-  return n === 1 ? "The one screen it found opened without signing in." : `All ${n} screens it found opened without signing in.`;
+  return n === 1 ? "The one screen besides the sign-in opened without signing in." : `All ${n} screens besides the sign-in opened without signing in.`;
+}
+
+/** Whether the map shows a way to make an account: a sign-up address, or a control that makes one. */
+const signUpInMap = (map: Pick<ProductMap, "screens" | "actions">) =>
+  signUpIn(map.screens.map((s) => s.path), [{ controls: map.actions.map((a) => ({ kind: a.kind, label: a.onScreen ?? a.name })) }]);
+
+/**
+ * An app open all the way through with no sign-up has no new account to walk, nor journeys from one:
+ * said once, as that, rather than as two things that failed. Undefined when there's more to say.
+ */
+export function noSignUpWords(map: Pick<ProductMap, "screens" | "actions" | "learner" | "newUser" | "journeyWalk">): string | undefined {
+  if (!allOpenWords(map) || signUpInMap(map) || map.newUser?.status === "walked" || map.journeyWalk?.status === "walked") return undefined;
+  return "No sign-up was seen, so no new account or journeys were walked.";
 }
 
 /** Screens other than the start the browser opened by itself, signed out, that aren't a sign-in. */
@@ -2423,7 +2436,7 @@ export function noFixWords(map: ProductMap): string {
   if (review?.ran && review.raised > 0) said.push(`The AI raised ${plural(review.raised, "item")}, and none had evidence that held up.`);
   else if (review?.ran) said.push(`The AI reviewed ${plural(review.screens, "screen")} and raised nothing.`);
   else if (review) said.push(`Only measured: ${REVIEW_FAILED[review.why ?? "failed"] ?? "the AI's review didn't run"}.`);
-  if (l?.signInFirst || l?.stoppedAtDoor) said.push(signInWords(map));
+  if ((l?.signInFirst || l?.stoppedAtDoor) && !allOpenWords(map)) said.push(signInWords(map));
   else if (l && l.stoppedBy !== "complete") said.push("It stopped at a limit, so some screens went unseen.");
   return said.join(" ");
 }
@@ -2804,9 +2817,9 @@ function notCheckedLines(map: ProductMap): string[] {
     ...(review?.ran && Object.keys(review.dropped).length ? [`${droppedWords(Object.values(review.dropped).reduce((a, b) => a + b, 0))}`] : []),
     ...(l?.signInFirst || l?.stoppedAtDoor ? [allOpenWords(map) ?? `${mdText(signInWords(map))}${l.standIn && l.standIn.status !== "reached" ? ` ${mdText(badgeWords(l.standIn.message))}` : ""}${nextInMd(wallNext(map))}`] : []),
     ...(l && l.stoppedBy !== "complete" ? [`It stopped before seeing everything (${mdText(stopWords(l))}).`] : []),
-    ...(map.newUser && map.newUser.status !== "walked" ? [`No new account was walked: ${mdText(map.newUser.message)}`] : []),
+    ...(noSignUpWords(map) ? [noSignUpWords(map)!] : map.newUser && map.newUser.status !== "walked" ? [`No new account was walked: ${mdText(map.newUser.message)}`] : []),
     ...(map.newUser?.notReached ?? []).slice(0, 8).map((n) => `A new account couldn't open ${mdCode(n.path)}: ${NOT_REACHED_WORDS[n.why] ?? mdText(n.why)}.`),
-    ...(map.journeyWalk?.status === "not_walked" ? [mdText(map.journeyWalk.message, 500)] : []),
+    ...(map.journeyWalk?.status === "not_walked" && !noSignUpWords(map) ? [mdText(map.journeyWalk.message, 500)] : []),
   ];
   return missed.length ? ["", "## Not checked", "", ...missed.map((m) => `- ${m}`), ""] : [];
 }

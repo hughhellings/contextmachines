@@ -4,7 +4,15 @@ What changed in each release, for the people running it. Versions follow [semant
 
 ## Unreleased
 
+## 0.1.3 - 2026-11-11
+
 - **The first run just works.** `learn` on a machine with no browser yet used to stop and tell you to run `npx playwright install chromium`. In a terminal it now offers the one-time download (about 270 MB), with a yes, and carries on. In CI or a pipe it still says how, as before.
+- **Your plan before any key.** With no `--ai` and nothing saved by `init`, a key left in your shell (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and the rest) came before a signed-in Claude Code or Codex, and was billed per token. A signed-in Claude Code, then Codex, now come first, as `init` lists them.
+- **`init`'s browser download works under `npx`.** It ran `npx playwright install`, which, started from `npx contextmachines`, ran contextmachines again instead. It now runs Playwright's own installer directly.
+- **An app open all the way through reads that way.** Its report counted the screens besides the sign-in as "all" the screens, headed itself "sign-in not passed" and listed the sign-in page as one the made-up user couldn't open. It now says "All 6 screens besides the sign-in opened without signing in" and, with no sign-up, "No sign-up was seen, so no new account or journeys were walked".
+- **The model can be saved.** `"model"` in `contextmachines.config.json` sets the AI's model, as `--model` does, so a Codex whose default your plan can't use is set once. `--model` still wins.
+- **Claude Code says why it failed.** A failed ask said only "exit 1"; it now gives Claude Code's own reason, such as an expired sign-in.
+- **Clearer first steps.** The README starts with the command to run, says plainly that the browser stays on your dev server while your dev server talks to its own database, and that the AI is the first one you have unless you choose.
 
 ## 0.1.2 - 2026-11-10
 

@@ -6,18 +6,17 @@ Finds what to fix in your web app. In a few minutes it walks your product the wa
 
 The new-user walk works on your own machine where the browser decides who's signed in: `supabase-js` in a client-rendered app, or a client-rendered app that asks its own `/api`. For anything else, use `--login` with a test account.
 
-```bash
-npx contextmachines init     # once: finds your app, which AI reads it, the line for your coding agent
-npx contextmachines learn
-```
-
-`init` works your project out from the folder: which app, how it starts, where it's running, how people sign in. If it isn't running, it offers to start it, and stops it again afterwards. It lists exactly which files it will change and asks first. On a local app a stand-in user usually gets past the sign-in for you; anywhere else, you sign in once yourself in a browser window with `--login`. [Behind a sign-in](#behind-a-sign-in) says how. To skip it, give the address yourself. The first time, it offers to download its browser (once, about 270 MB); in CI, run `npx playwright@1.61.0 install chromium` first:
+From your app's folder, while it runs:
 
 ```bash
-npx contextmachines learn https://yourapp.com
+npx contextmachines learn localhost:3000
 ```
 
-![A terminal running npx contextmachines learn on the example invoicing app: each screen it walked, then the list of what to fix first: a button that does nothing with its file and line, and a predicted item](https://raw.githubusercontent.com/hughhellings/contextmachines/main/.github/assets/terminal.svg)
+Run from the folder, so each fix gets its file and line. The first time, it offers to download its browser (once, about 270 MB). It uses your Claude Code or Codex sign-in if you have one ([Bring your own AI](#bring-your-own-ai)); `--ai none` sends nothing to an AI.
+
+`npx contextmachines init` sets the folder up once, and then plain `npx contextmachines learn` is enough. It works your project out: which app, how it starts, where it's running, how people sign in, and which AI reads it. If the app isn't running, it offers to start it, and stops it again afterwards. It asks whether your AI may read your code, which is how screens behind a sign-in get mapped. It lists exactly which files it will change and asks first. On a local app a stand-in user usually gets past the sign-in for you; anywhere else, you sign in once yourself in a browser window with `--login`. [Behind a sign-in](#behind-a-sign-in) says how. In CI, run `npx playwright@1.61.0 install chromium` first.
+
+![A terminal running npx contextmachines learn on the example invoicing app: each screen it walked, then the list of what to fix first: a button that does nothing, with its file and line](https://raw.githubusercontent.com/hughhellings/contextmachines/main/.github/assets/terminal.svg)
 
 > [!NOTE]
 > Context Machines is 0.x. What it prints, its options and the shape of `map.json` may still change between minor versions (0.1 to 0.2), never in a patch (0.1.0 to 0.1.1); [CHANGELOG.md](https://github.com/hughhellings/contextmachines/blob/main/CHANGELOG.md) says what changed. The GitHub Action's `@v0.1` tag moves only to 0.1.x patches.
@@ -26,20 +25,20 @@ A browser follows links, opens menus and pop-ups, fills in forms with test value
 
 ```
 ℹ learning localhost:3000 · AI: your Claude Code sign-in · saves stopped
-  up to 3 min exploring, up to 2 min more at a sign-in · v0.1.2
-✓ browser ready 1.1s
+  up to 3 min exploring, up to 2 min more at a sign-in · v0.1.3
+✓ browser ready 1.3s
 
 ✓  public  7 screens · sign-in at / · 1 found  38s
-  × /dashboard  9.2s  1 found
+  × /dashboard  9.3s  1 found
     ⚑ "Import invoices" does nothing when pressed
-  ✓ /  6.1s
+  ✓ /  6.2s
   ✓ /clients/new  9.1s
-  ✓ /invoices/new  3.2s
+  ✓ /invoices/new  3.1s
   ✓ /reports  3.4s
   ✓ /settings/payments  4.2s
   ✓ /invoices/:id  2.9s
 ✓  new user  no sign-up seen  2s
-✓  ai review  7 reviewed · none predicted  9s  ai 10.0k tokens · 100% cached
+✓  ai review  7 reviewed · none predicted  17s  ai 12.4k tokens · 0% cached
 
 ──────────────────────────────── Fix first 1 ─────────────────────────────────
 
@@ -50,10 +49,10 @@ A browser follows links, opens menus and pop-ups, fills in forms with test value
 
   Findings  1 proven
    Screens  7 seen
-        AI  10.0k tokens · 100% cached · 2 asks
+        AI  12.4k tokens · 0% cached · 2 asks
             claude-haiku-5-5 + claude-opus-5-5 · on your Claude Code plan
-  Start at  18:23:57
-  Duration  48s · first finding at 34s
+  Start at  18:33:43
+  Duration  56s · first finding at 35s
 
  → Hand contextmachines/FIX.md to your coding agent
   The page: contextmachines/report.html
@@ -106,7 +105,7 @@ Be clear about what that is:
 - **Stand-in screens are your real screens with made-up data.** They show how the product is built, and nothing about any real account. That pass only looks: it presses nothing, and ends once every screen it can reach has been looked at. They're marked wherever they're shown. Numbers, names and rows on them are never judged. Their layout, fixed wording and flow are real, so what's measured there can be on the fix list, marked as seen with a made-up user, and those items are compared by `diff`. Nothing about real accounts is proven.
 - **"Read from the code, not seen" is what it says.** A cited line exists, but that doesn't show what's said about it is right. It stays in a section of its own (`fromCode` in `map.json`), and `diff` ignores it.
 - **It reaches nothing real.** That browser can't reach anything, your dev server included. Node reads only your dev server's own files and hands them over. No request with that user reaches any server ([how](https://github.com/hughhellings/contextmachines/blob/main/PRIVACY.md#the-stand-in-user)).
-- **A run on your machine stays on it, from the first request.** The public pages are walked too, but nothing goes to another host, and an address your project's config hands on to another server (a dev proxy) counts as one: not your real database, not your real sign-in, not fonts or trackers. The result lists the hosts it stayed away from, and a public page that needs one may look different. `--login` and `--create` are the exceptions, as they ask for the real thing.
+- **On your machine, the browser stays on your dev server, from the first request.** The public pages are walked too, but the browser reaches no other host, and an address your project's config hands on to another server (a dev proxy) counts as one: not a hosted database or sign-in, not fonts or trackers. Your dev server itself runs as usual and talks to whatever database it's set up for, so point it at a local or test one ([details](https://github.com/hughhellings/contextmachines/blob/main/PRIVACY.md#the-stand-in-user)). The result lists the hosts it stayed away from, and a public page that needs one may look different. `--login` and `--create` are the exceptions, as they ask for the real thing.
 - **A screen counts only when it really drew.** A sign-in of any kind, a paywall, an error screen, a spinner or a blank page isn't a screen, and it says which it was. Nor is anything drawn at two addresses, or what your app also draws at an address that can't exist: a screen needs made-up data of its own on it, or something no other address draws.
 - **It works where the browser decides who's signed in:** `supabase-js` in a client-rendered app, keeping its session in browser storage, or a client-rendered app that asks its own `/api` who's signed in. Where your server decides (server-rendered pages, other sign-in libraries for now) the stand-in says so and stops, the code read still works, and the result names `--login` with a test account as the next step.
 
@@ -247,18 +246,18 @@ It teaches the agent when to use `learn` and `diff`, how to read `PRODUCT.md` an
 
 ## Bring your own AI
 
-With an AI, it says what the product is for, names every action and picks the main one. It uses the first one you already have:
+With an AI, it says what the product is for, names every action and picks the main one. It uses the first one you already have, your subscription before any key:
 
 | You have | It uses |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Anthropic |
-| `OPENAI_BASE_URL` | Any OpenAI-compatible server: Ollama, LM Studio, your company's proxy (with `--model`) |
-| `OPENAI_API_KEY` | OpenAI |
-| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini |
-| `AI_GATEWAY_API_KEY` | Vercel AI Gateway (any model it serves) |
-| `OPENROUTER_API_KEY` | OpenRouter |
 | Claude Code, signed in | Your Claude subscription. No key. (macOS and Linux) |
 | Codex, signed in | Your ChatGPT subscription. No key. (macOS and Linux) |
+| `ANTHROPIC_API_KEY` | Anthropic, billed per token to that key |
+| `OPENAI_BASE_URL` | Any OpenAI-compatible server: Ollama, LM Studio, your company's proxy (with `--model`) |
+| `OPENAI_API_KEY` | OpenAI, billed per token |
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini, billed per token |
+| `AI_GATEWAY_API_KEY` | Vercel AI Gateway (any model it serves), billed per token |
+| `OPENROUTER_API_KEY` | OpenRouter, billed per token |
 
 Choose with `--ai` and `--model`; `--ai none` uses none. With a local model (`--ai ollama`), nothing leaves your machine. With a signed-in Claude Code or Codex, only the question is sent: none of your settings, tools, skills or connected servers are loaded.
 
@@ -270,7 +269,7 @@ An unchanged product reuses its last reading, so repeat runs cost nothing. Witho
 
 `npx contextmachines learn --help` and `npx contextmachines diff --help` list them all, with their ranges and defaults.
 
-`npx contextmachines init` sets a folder up, and saves your answers in `contextmachines.config.json`: `{ "url": "http://localhost:3000", "ai": "claude-code", "readCode": true }`. It holds no key or password, so it's safe to commit. `learn` uses it for whatever you don't type: an address or `--ai` on the command line wins. `init --yes --url <address>` takes the defaults without asking, for scripts.
+`npx contextmachines init` sets a folder up, and saves your answers in `contextmachines.config.json`: `{ "url": "http://localhost:3000", "ai": "claude-code", "readCode": true }`. It holds no key or password, so it's safe to commit. Add `"model"` to choose the AI's model, as `--model` does: for Codex, a model your plan has. `learn` uses it for whatever you don't type: an address or `--ai` on the command line wins. `init --yes --url <address>` takes the defaults without asking, for scripts.
 
 | Option | |
 | --- | --- |
@@ -380,7 +379,7 @@ Saves go through, so it can reach what only exists after creating something. A w
 Context Machines collects nothing about you or your runs, and there is no account. The only connections it makes are:
 
 - **the site you point it at**, through the browser, including whatever that site's pages load themselves (scripts, fonts, images);
-- **the AI you choose**, if any: two questions per run, none when the product hasn't changed (with `--ai ollama` it stays on your machine, with `--ai none` there is none). If you said yes to reading your code, some of your source code goes to that AI too, in a handful of questions, and `map.json` lists every file;
+- **the AI it uses**, if any: the one you set with `init` or `--ai`, otherwise the first you already have ([Bring your own AI](#bring-your-own-ai)), and none with `--ai none`. That's two questions per run, none when the product hasn't changed (with `--ai ollama` it stays on your machine, with `--ai none` there is none). If you said yes to reading your code, some of your source code goes to that AI too, in a handful of questions, and `map.json` lists every file;
 - **Playwright's browser download**, once, when you say yes to it in `init` or `learn`, or run `npx playwright@1.61.0 install chromium`.
 
 A signed-in Claude Code or Codex is its own program, with its own settings for what it reports to its maker; Context Machines starts it with only the question.

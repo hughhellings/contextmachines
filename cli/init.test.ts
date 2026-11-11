@@ -355,6 +355,13 @@ describe("the config file", () => {
   it("reads as nothing saved when there's no file", () => {
     assert.deepEqual(readProjectConfig(dir), {});
   });
+
+  it("reads a model saved beside the AI, and ignores an empty one", () => {
+    write(CONFIG_FILE, JSON.stringify({ ai: "codex", model: " gpt-5 " }));
+    assert.deepEqual(readProjectConfig(dir), { ai: "codex", model: "gpt-5" });
+    write(CONFIG_FILE, JSON.stringify({ ai: "codex", model: "" }));
+    assert.deepEqual(readProjectConfig(dir), { ai: "codex" });
+  });
 });
 
 describe("without a person", () => {

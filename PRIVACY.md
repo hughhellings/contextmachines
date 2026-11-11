@@ -5,7 +5,7 @@ What `contextmachines` does with the site it learns, and with what it sees there
 ## It runs on your machine
 
 - The browser, the learning and the understanding all run in the `contextmachines` process. The understanding (`packages/understanding`) is called directly (`cli/understand.ts`). There is no Context Machines server, and nothing is uploaded to one.
-- The one call out of your machine that `contextmachines` makes itself is to the AI you choose, if any (see below). With `--ai ollama` or `--ai none`, nothing leaves your machine except the visits to the site: the browser's, and a `HEAD` request from Node to check the address answers before the browser starts.
+- The one call out of your machine that `contextmachines` makes itself is to the AI it uses, if any: the one you set with `init` or `--ai`, otherwise the first you already have, a signed-in Claude Code or Codex before any API key (see below). With `--ai ollama` or `--ai none`, nothing leaves your machine except the visits to the site: the browser's, and a `HEAD` request from Node to check the address answers before the browser starts.
 - `init` can download the browser for you (Playwright's own download, from Playwright's servers). It asks first, and `--yes` doesn't count as a yes.
 - `init` asks Claude Code and Codex, if you have them, whether you're signed in (`claude auth status`, `codex login status`). Claude Code runs with its telemetry and update checks off, as it does for every ask.
 - Your source code stays here unless you say yes. With that yes it goes to the AI you chose, and to nobody else (see [Reading your code](#reading-your-code)). Finding where to change something searches your repository on this machine and sends nothing.
