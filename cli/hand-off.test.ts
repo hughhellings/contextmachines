@@ -211,7 +211,8 @@ describe("handing the list to the coding agent", () => {
     mkdirSync(join(bin, "node_modules", "codex", "bin"), { recursive: true });
     writeFileSync(join(bin, "node_modules", "codex", "bin", "codex.js"), "");
     writeFileSync(join(bin, "codex.cmd"), `@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\codex\\bin\\codex.js" %*\r\n`);
-    assert.equal(agentFor("codex", { PATH: bin, PATHEXT: ".EXE;.CMD" }, "win32"), "codex");
+    // PATHEXT in the case the file has: Windows' own disk doesn't mind, Linux's does.
+    assert.equal(agentFor("codex", { PATH: bin, PATHEXT: ".exe;.cmd" }, "win32"), "codex");
     assert.deepEqual(agentLaunch("codex", { PATH: bin }, "win32"), { command: process.execPath, args: [join(bin, "node_modules", "codex", "bin", "codex.js")] });
     writeFileSync(join(bin, "claude.exe"), "");
     assert.deepEqual(agentLaunch("claude", { PATH: bin }, "win32"), { command: join(bin, "claude.exe"), args: [] }, "Claude Code's own installer: the program itself");

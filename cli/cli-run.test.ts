@@ -124,7 +124,8 @@ describe("Ctrl-C", { skip: !browser ? "no browser installed" : process.platform 
     const { code, text } = await pressed(700);
     assert.equal(code, 130, text);
     assert.match(text, /Stopping: writing what it learned so far/);
-    assert.match(text, /^! Stopped; nothing was written\.$/m, text);
+    // Said by the second press, or by the run as it ends, whichever comes first on a slow machine.
+    assert.match(text, /^[!×] Stopped; nothing was written\.$/m, text);
   });
 });
 
