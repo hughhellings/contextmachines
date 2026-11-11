@@ -13,34 +13,34 @@
   <rect x="272.8" y="368" width="102.7" height="18" fill="#f87171"/>
   <text x="20" y="58"><tspan class="dim">$</tspan> npx contextmachines learn localhost:3000</text>
   <text x="20" y="94"><tspan class="dim">ℹ</tspan> learning <tspan class="c36">localhost:3000</tspan><tspan class="dim"> · AI: your Claude Code sign-in · saves stopped</tspan></text>
-  <text x="20" y="112">  <tspan class="dim">up to 3 min exploring, up to 2 min more at a sign-in · v0.1.3</tspan></text>
-  <text x="20" y="130"><tspan class="c32">✓</tspan> browser ready <tspan class="dim">1.3s</tspan></text>
+  <text x="20" y="112">  <tspan class="dim">up to 3 min exploring, up to 2 min more at a sign-in · v0.1.4</tspan></text>
+  <text x="20" y="130"><tspan class="c32">✓</tspan> browser ready <tspan class="dim">1.1s</tspan></text>
   <text x="20" y="148"></text>
-  <text x="20" y="166"><tspan class="c32">✓</tspan> <tspan class="c30"> public </tspan> 7 screens · sign-in at / · 1 found  <tspan class="dim">38s</tspan></text>
-  <text x="20" y="184">  <tspan class="c31">×</tspan> /dashboard  <tspan class="dim">9.3s</tspan>  <tspan class="c31">1 found</tspan></text>
+  <text x="20" y="166"><tspan class="c32">✓</tspan> <tspan class="c30"> public </tspan> 7 screens · sign-in at / · 1 found  <tspan class="dim">37s</tspan></text>
+  <text x="20" y="184">  <tspan class="c31">×</tspan> /dashboard  <tspan class="dim">8.7s</tspan>  <tspan class="c31">1 found</tspan></text>
   <text x="20" y="202">    <tspan class="c31">⚑</tspan> "Import invoices" does nothing when pressed</text>
-  <text x="20" y="220">  <tspan class="c32">✓</tspan> /  <tspan class="dim">6.2s</tspan></text>
-  <text x="20" y="238">  <tspan class="c32">✓</tspan> /clients/new  <tspan class="dim">9.1s</tspan></text>
+  <text x="20" y="220">  <tspan class="c32">✓</tspan> /  <tspan class="dim">6.1s</tspan></text>
+  <text x="20" y="238">  <tspan class="c32">✓</tspan> /clients/new  <tspan class="dim">9.0s</tspan></text>
   <text x="20" y="256">  <tspan class="c32">✓</tspan> /invoices/new  <tspan class="dim">3.1s</tspan></text>
-  <text x="20" y="274">  <tspan class="c32">✓</tspan> /reports  <tspan class="dim">3.4s</tspan></text>
+  <text x="20" y="274">  <tspan class="c32">✓</tspan> /reports  <tspan class="dim">3.3s</tspan></text>
   <text x="20" y="292">  <tspan class="c32">✓</tspan> /settings/payments  <tspan class="dim">4.2s</tspan></text>
   <text x="20" y="310">  <tspan class="c32">✓</tspan> /invoices/:id  <tspan class="dim">2.9s</tspan></text>
   <text x="20" y="328"><tspan class="c32">✓</tspan> <tspan class="c30"> new user </tspan> no sign-up seen  <tspan class="dim">2s</tspan></text>
-  <text x="20" y="346"><tspan class="c32">✓</tspan> <tspan fill="#111827"> ai review </tspan> 7 reviewed · none predicted  <tspan class="dim">17s</tspan>  <tspan class="dim">ai 12.4k tokens · 0% cached</tspan></text>
+  <text x="20" y="346"><tspan class="c32">✓</tspan> <tspan fill="#111827"> ai review </tspan> 7 reviewed · none predicted  <tspan class="dim">12s</tspan>  <tspan class="dim">ai 11.3k tokens · 0% cached</tspan></text>
   <text x="20" y="364"></text>
   <text x="20" y="382"><tspan class="c31">────────────────────────────────</tspan><tspan class="bold" fill="#111827"> Fix first 1 </tspan><tspan class="c31">─────────────────────────────────</tspan></text>
   <text x="20" y="400"></text>
   <text x="20" y="418">  1. <tspan class="c31">proven     </tspan><tspan class="bold">"Import invoices" does nothing when pressed</tspan></text>
-  <text x="20" y="436">     <tspan class="dim">where      </tspan><tspan class="c36">index.html:73</tspan></text>
+  <text x="20" y="436">     <tspan class="dim">where      </tspan><tspan class="c36">index.html:100</tspan></text>
   <text x="20" y="454">     <tspan class="dim">seen       </tspan><tspan class="dim">/dashboard</tspan></text>
   <text x="20" y="472">     <tspan class="dim">evidence   </tspan><tspan class="c36">contextmachines/screens/dashboard.jpg</tspan></text>
   <text x="20" y="490"></text>
   <text x="20" y="508">  <tspan class="dim">Findings</tspan>  <tspan class="c31 bold">1 proven</tspan></text>
   <text x="20" y="526">  <tspan class="dim"> Screens</tspan>  <tspan class="c32 bold">7 seen</tspan></text>
-  <text x="20" y="544">  <tspan class="dim">      AI</tspan>  12.4k tokens<tspan class="dim"> · </tspan>0% cached<tspan class="dim"> · </tspan>2 asks</text>
+  <text x="20" y="544">  <tspan class="dim">      AI</tspan>  11.3k tokens<tspan class="dim"> · </tspan>0% cached<tspan class="dim"> · </tspan>2 asks</text>
   <text x="20" y="562">            claude-haiku-5-5 + claude-opus-5-5<tspan class="dim"> · </tspan>on your Claude Code plan</text>
-  <text x="20" y="580">  <tspan class="dim">Start at</tspan>  18:33:43</text>
-  <text x="20" y="598">  <tspan class="dim">Duration</tspan>  56s<tspan class="dim"> · first finding at 35s</tspan></text>
+  <text x="20" y="580">  <tspan class="dim">Start at</tspan>  22:34:28</text>
+  <text x="20" y="598">  <tspan class="dim">Duration</tspan>  50s<tspan class="dim"> · first finding at 34s</tspan></text>
   <text x="20" y="616"></text>
   <text x="20" y="634"> <tspan class="c36">→</tspan> <tspan class="c36">Hand contextmachines/FIX.md to your coding agent</tspan></text>
   <text x="20" y="652">  <tspan class="dim">The page: contextmachines/report.html</tspan></text>

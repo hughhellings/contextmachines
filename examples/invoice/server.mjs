@@ -43,4 +43,4 @@ const server = createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(page);
 });
-server.listen(port, () => console.log(`Invoice Demo${changed ? " (changed)" : ""} at http://localhost:${port}`));
+server.listen(port, () => console.log(`Tally${changed ? " (changed)" : ""} at http://localhost:${port}`));

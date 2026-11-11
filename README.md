@@ -25,34 +25,34 @@ A browser follows links, opens menus and pop-ups, fills in forms with test value
 
 ```
 ℹ learning localhost:3000 · AI: your Claude Code sign-in · saves stopped
-  up to 3 min exploring, up to 2 min more at a sign-in · v0.1.3
-✓ browser ready 1.3s
+  up to 3 min exploring, up to 2 min more at a sign-in · v0.1.4
+✓ browser ready 1.1s
 
-✓  public  7 screens · sign-in at / · 1 found  38s
-  × /dashboard  9.3s  1 found
+✓  public  7 screens · sign-in at / · 1 found  37s
+  × /dashboard  8.7s  1 found
     ⚑ "Import invoices" does nothing when pressed
-  ✓ /  6.2s
-  ✓ /clients/new  9.1s
+  ✓ /  6.1s
+  ✓ /clients/new  9.0s
   ✓ /invoices/new  3.1s
-  ✓ /reports  3.4s
+  ✓ /reports  3.3s
   ✓ /settings/payments  4.2s
   ✓ /invoices/:id  2.9s
 ✓  new user  no sign-up seen  2s
-✓  ai review  7 reviewed · none predicted  17s  ai 12.4k tokens · 0% cached
+✓  ai review  7 reviewed · none predicted  12s  ai 11.3k tokens · 0% cached
 
 ──────────────────────────────── Fix first 1 ─────────────────────────────────
 
   1. proven     "Import invoices" does nothing when pressed
-     where      index.html:73
+     where      index.html:100
      seen       /dashboard
      evidence   contextmachines/screens/dashboard.jpg
 
   Findings  1 proven
    Screens  7 seen
-        AI  12.4k tokens · 0% cached · 2 asks
+        AI  11.3k tokens · 0% cached · 2 asks
             claude-haiku-5-5 + claude-opus-5-5 · on your Claude Code plan
-  Start at  18:33:43
-  Duration  56s · first finding at 35s
+  Start at  22:34:28
+  Duration  50s · first finding at 34s
 
  → Hand contextmachines/FIX.md to your coding agent
   The page: contextmachines/report.html

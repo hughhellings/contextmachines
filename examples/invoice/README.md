@@ -1,4 +1,4 @@
-# Invoice Demo
+# Tally, an invoicing app to try it on
 
 A small invoicing app to try Context Machines on, and what one run of it wrote. It's a single-page app, the way most products are built, with no dependencies, and it has a problem planted in it: an "Import invoices" button that does nothing.
 

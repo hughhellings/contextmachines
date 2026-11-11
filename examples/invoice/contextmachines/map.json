@@ -1,53 +1,44 @@
 {
   "schemaVersion": "map-1",
   "url": "http://localhost:3000/",
-  "learnedAt": "2026-11-11T18:34:40.080Z",
-  "product": "Invoice Demo is an invoicing tool for small businesses to bill their clients, send invoices, and get paid online. It serves the business owner or staff member who issues invoices.",
+  "learnedAt": "2026-11-11T22:35:18.437Z",
+  "product": "Tally is an invoicing product for people who bill clients. It keeps clients and invoices in one place, sends invoices, connects online payments, and exports reports.",
   "mainAction": {
     "id": "invoice.create",
     "label": "Save invoice",
-    "reason": "the AI's reading of the product: The product is for issuing invoices, and creating an invoice is the action that produces the thing it exists for.",
+    "reason": "the AI's reading of the product: The product is for billing clients, and creating an invoice is the core thing a customer comes to record.",
     "source": "ai"
   },
   "setupSteps": [
     {
       "action": "invoice.send",
       "requires": "invoice.create",
-      "why": "The Send invoice button is on an invoice page, so the invoice must be saved before it can be sent.",
+      "why": "Sending applies to an invoice, so an invoice must be saved first.",
       "source": "ai"
     }
   ],
   "journeys": [
     {
-      "name": "Add a client and issue an invoice",
+      "name": "Export a report",
       "screens": [
-        "/",
         "/dashboard",
-        "/clients/new",
-        "/invoices/new"
-      ]
-    },
-    {
-      "name": "Connect payments to get paid online",
-      "screens": [
-        "/",
-        "/dashboard",
-        "/settings/payments"
+        "/reports"
       ]
     }
   ],
   "screens": [
     {
       "path": "/dashboard",
-      "title": "Dashboard | Invoice Demo",
+      "title": "Dashboard | Tally",
       "headings": [
-        "Dashboard"
+        "Dashboard",
+        "Recent invoices"
       ],
       "photo": "screens/dashboard.jpg"
     },
     {
       "path": "/invoices/new",
-      "title": "New invoice | Invoice Demo",
+      "title": "New invoice | Tally",
       "headings": [
         "Create invoice"
       ],
@@ -55,7 +46,7 @@
     },
     {
       "path": "/invoices/:id",
-      "title": "Invoice 1 | Invoice Demo",
+      "title": "Invoice 1 | Tally",
       "headings": [
         "Invoice INV-1"
       ],
@@ -63,7 +54,7 @@
     },
     {
       "path": "/",
-      "title": "Log in | Invoice Demo",
+      "title": "Log in | Tally",
       "headings": [
         "Welcome back"
       ],
@@ -71,7 +62,7 @@
     },
     {
       "path": "/clients/new",
-      "title": "New client | Invoice Demo",
+      "title": "New client | Tally",
       "headings": [
         "New client"
       ],
@@ -79,7 +70,7 @@
     },
     {
       "path": "/reports",
-      "title": "Reports | Invoice Demo",
+      "title": "Reports | Tally",
       "headings": [
         "Reports"
       ],
@@ -87,7 +78,7 @@
     },
     {
       "path": "/settings/payments",
-      "title": "Payments | Invoice Demo",
+      "title": "Payments | Tally",
       "headings": [
         "Get paid online"
       ],
@@ -98,7 +89,7 @@
     {
       "id": "client.create",
       "name": "Save client",
-      "does": "Saves a new client's name, email, billing address and VAT number so they can be chosen on invoices.",
+      "does": "Stores a new client's name, email, billing address and VAT number so they can be chosen on invoices.",
       "onScreen": "Save client",
       "kind": "save",
       "request": "POST /api/clients",
@@ -109,7 +100,7 @@
     {
       "id": "invoice.create",
       "name": "Save invoice",
-      "does": "Creates a new invoice for a chosen client with an amount and reg. no.",
+      "does": "Creates a new invoice for a chosen client with an amount and reference number.",
       "onScreen": "Save invoice",
       "kind": "save",
       "request": "POST /api/invoices",
@@ -120,7 +111,7 @@
     {
       "id": "payment.connect",
       "name": "Connect payments",
-      "does": "Connects a payment account by its account number so the business can get paid online.",
+      "does": "Links a payments account so invoices can be paid online.",
       "onScreen": "Connect payments",
       "kind": "save",
       "request": "POST /api/payments/connect",
@@ -131,7 +122,7 @@
     {
       "id": "report.export",
       "name": "Export CSV",
-      "does": "Exports the report as a CSV file.",
+      "does": "Produces a CSV file of report data to download.",
       "onScreen": "Export CSV",
       "kind": "save",
       "request": "POST /api/reports/export",
@@ -167,7 +158,7 @@
     "savesStopped": 6,
     "sentByPage": 0,
     "savesWentThrough": false,
-    "seconds": 56,
+    "seconds": 50,
     "errors": [],
     "stoppedFrom": {
       "listed": 5,
@@ -192,50 +183,50 @@
     "measured": 7,
     "timing": {
       "stages": {
-        "sign-in known": 7146,
-        "first item": 34578,
-        "browser ends": 39528,
-        "reading ends": 56217,
-        "review ends": 56217,
-        "last look ends": 56217
+        "sign-in known": 6885,
+        "first item": 33577,
+        "browser ends": 38472,
+        "reading ends": 50202,
+        "review ends": 50202,
+        "last look ends": 50202
       },
       "scan": {
-        "load": 3715,
-        "read": 831,
-        "photo": 111,
-        "checks": 1598,
-        "forms": 13664,
-        "commands": 3501,
-        "buttons": 12979,
-        "public pass": 39406
+        "load": 3663,
+        "read": 803,
+        "photo": 100,
+        "checks": 1599,
+        "forms": 13571,
+        "commands": 3498,
+        "buttons": 12312,
+        "public pass": 38360
       },
       "asks": [
         {
           "what": "You review a web product the way a person trying",
           "model": "claude-opus-5-5",
-          "chars": 4848,
-          "ms": 10360,
-          "at": 39566,
+          "chars": 4997,
+          "ms": 10246,
+          "at": 38490,
           "part": "review",
           "tokens": {
             "input": 2,
             "cacheRead": 0,
-            "cacheWrite": 3097,
-            "output": 911
+            "cacheWrite": 3173,
+            "output": 756
           }
         },
         {
           "what": "You are a product analyst. You are given the fea",
           "model": "claude-haiku-5-5",
-          "chars": 8333,
-          "ms": 16632,
-          "at": 39580,
+          "chars": 8271,
+          "ms": 11703,
+          "at": 38497,
           "part": "review",
           "tokens": {
             "input": 2,
             "cacheRead": 0,
-            "cacheWrite": 4864,
-            "output": 3571
+            "cacheWrite": 4822,
+            "output": 2571
           }
         }
       ]
@@ -243,11 +234,11 @@
     "ai": {
       "via": "your Claude Code sign-in",
       "asks": 2,
-      "tokens": 12447,
+      "tokens": 11326,
       "input": 4,
       "cacheRead": 0,
-      "cacheWrite": 7961,
-      "output": 4482,
+      "cacheWrite": 7995,
+      "output": 3327,
       "cached": 0,
       "model": "claude-haiku-5-5",
       "models": [
@@ -258,11 +249,9 @@
     "review": {
       "ran": true,
       "screens": 7,
-      "raised": 1,
+      "raised": 0,
       "kept": 0,
-      "dropped": {
-        "not a first-run screen": 1
-      },
+      "dropped": {},
       "seconds": 10
     }
   },
@@ -283,8 +272,8 @@
       "fix": "Wire this button to the action the product intends, or remove it: nothing changed on screen and nothing was sent within 2 seconds of the press.",
       "where": {
         "file": "index.html",
-        "line": 73,
-        "code": "html: `<h1>Dashboard</h1><div class=\"card\"><p>Create an invoice and send it to get paid.</p><button class=\"primary\" id=\"new\">New invoice</button><button id=\"import\">Import invoices</button></div>`,"
+        "line": 100,
+        "code": "…paid.</p></div><div class=\"actions\"><button id=\"import\">Import invoices</button><button class=\"primary\" id=\"new\">New invoice</button></div></div>"
       },
       "photo": "screens/dashboard.jpg"
     }

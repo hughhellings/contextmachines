@@ -10,7 +10,7 @@ Proven: the browser saw or measured each of these.
 
 ### 1. "Import invoices" does nothing when pressed
 
-- **Where to change it:** `index.html:73`, the line ``html: `<h1>Dashboard</h1><div class="card"><p>Create an invoice and send it to get paid.</p><button class="primary" id="new">New invoice</button><button id="import">Import invoices</button></div>`,``
+- **Where to change it:** `index.html:100`, the line `…paid.</p></div><div class="actions"><button id="import">Import invoices</button><button class="primary" id="new">New invoice</button></div></div>`
 - **Seen on:** `/dashboard`
 - **Evidence:** nothing changed on screen, and no request, navigation or dialog followed
 - **Photo:** [screens/dashboard.jpg](screens/dashboard.jpg)
@@ -19,7 +19,6 @@ Proven: the browser saw or measured each of these.
 
 ## Not checked
 
-- 1 item the AI raised had no evidence that held up, and was left out.
 - All 6 screens besides the sign-in opened without signing in.
 - No sign-up was seen, so no new account or journeys were walked.
 

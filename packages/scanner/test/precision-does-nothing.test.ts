@@ -19,6 +19,7 @@ beforeAll(async () => {
   const site = await serve((_req, res) => html(res, page("Tools", `<h1>Tools</h1>${pad}
     <div class=drop><button>Account menu</button><div class=menu><a href="/profile">Profile</a></div></div>
     <button onclick="var c=new AudioContext();var o=c.createOscillator();o.connect(c.destination);o.start();o.stop(c.currentTime+.05)">Test sound</button>
+    <input type=file id=pick hidden><button onclick="document.getElementById('pick').click()">Import file</button>
     <button>Really dead</button>`, css)));
   tools = await scanSite({ ...quick, startUrl: `http://localhost:${site}/`, maxPages: 2, maxDurationMs: 60_000 });
 
@@ -64,6 +65,10 @@ describe("does_nothing", () => {
 
   it("not a sound", () => {
     expect(nothing(tools)).not.toContain("Test sound");
+  });
+
+  it("not one that opens a file picker", () => {
+    expect(nothing(tools)).not.toContain("Import file");
   });
 
   it("not a button waiting for a tick, a choice or a pick from a list", () => {

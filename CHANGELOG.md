@@ -4,6 +4,11 @@ What changed in each release, for the people running it. Versions follow [semant
 
 ## Unreleased
 
+## 0.1.5 - 2026-11-11
+
+- **A button that opens a file picker isn't called dead.** "Import" and "Upload" buttons that open the system's file picker changed nothing on the page and sent nothing, so they were reported as doing nothing. A file picker opening now counts as the press working. Found by fixing the example's dead button with Claude Code and running it again.
+- **The example app looks like a product.** The invoicing example is now Tally, with a sidebar, totals and recent invoices; its one planted bug is the same.
+
 ## 0.1.4 - 2026-11-11
 
 - **Claude Code and Codex on Windows.** Your Claude or ChatGPT subscription now works on Windows too, as on macOS and Linux: no API key needed. Their Windows launchers can only start through cmd.exe, which would act on characters in a site's text, so it starts the program behind each one directly, with no shell, and gives Claude Code its instructions in a file. `f` hands the list to them on Windows too. CI starts both as npm installs them on Windows; a whole run there with a sign-in hasn't been tried yet.

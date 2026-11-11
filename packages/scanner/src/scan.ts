@@ -2493,6 +2493,9 @@ async function crawlSite(config: ScanConfig, env: Record<string, string | undefi
     }, Math.max(0, deadline - Date.now()) + WATCHDOG_MARGIN_MS);
     page.on("dialog", () => void outsideEffects++);
     page.on("download", () => void outsideEffects++);
+    // A file picker opened ("Import", "Upload"): the press did its part, and the person's choice comes
+    // next. Listening also keeps the system's own picker from opening.
+    page.on("filechooser", () => void outsideEffects++);
     page.on("framenavigated", (frame) => {
       if (frame !== page.mainFrame()) return;
       if (signingIn) phase = "crawl"; // sent: the page it led to is the site's, and its saves are as real as any
