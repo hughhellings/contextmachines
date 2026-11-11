@@ -27,14 +27,14 @@ import { predict } from "./predictions.ts";
 import { chosenStorageKey, detectProject, detectUrl, hasAppCode, listeners, notFoundWords, proxiedPaths, repoRootOf, servedFromElsewhere, startDev, wallPlan, within } from "./project.ts";
 import { readRepo } from "./repo.ts";
 import { understand, type Understood } from "./understand.ts";
-import { AI_CHOICES, aiTotals, pickAi, timedAi, type Ai, type AskTiming } from "./ai.ts";
+import { AI_CHOICES, aiTotals, launcherUnreadable, pickAi, timedAi, type Ai, type AskTiming } from "./ai.ts";
 import { browserCommand, browserInstalled, INIT_ABOUT, INIT_EXIT_MEANINGS, INIT_OPTIONS, installBrowser, readProjectConfig, runInit, saveAddress } from "./init.ts";
 import {
   badgeWords, behindSignIn, compare, deadStart, diff, filesToClear, FIX_FILE, fixDoc, fixLines, fixPhoto, goneSince, newSince, groupFindings, groupTargets, groupText, HOME, issueText, journeyHeadline, journeyLive, journeyMap, journeyTree, journeysNotWalked, keptNoMainAction, leftForAnotherSite, liveAddress, liveIssues, MANIFEST, MAP_SCHEMA, mayKeepDataHere, moreFixLines, fixRest, forPasting, nextLines, outInUse, jpegSize, type PhotoBoxes, photoName, plural,
   productDoc, productFile, PRODUCT_NEW, provenCount, publicUrl, redact, referredPhotos, reportPage, resultLines, rowLines, screenName, signUpIn, startUrl, stoppedFrom, summaryRows, usageWords, wallNext, whyNoJourneys, whyNothing, withLiveAddresses, writePrivate, type Fix, type Prediction, type ProductMap,
 } from "./report.ts";
 import { LIVE_MIN_COLUMNS, liveWanted, MOST_WIDTH, PARTS, RunScreen, type Group, type StepEnd } from "./run-screen.ts";
-import { AGENT_NAMES, agentHere, clipboardFor, copyText, endMenu, fixPrompt, menuKeys, menuLine, onPath, openerFor, openFile, startAgent } from "./hand-off.ts";
+import { AGENT_NAMES, agentHere, agentLaunch, clipboardFor, copyText, endMenu, fixPrompt, menuKeys, menuLine, onPath, openerFor, openFile, startAgent } from "./hand-off.ts";
 import { ask, colors, colorWanted, columnsOf, confirm, ignoreBrokenPipes, inForeground, keyWanted, linked, linksWanted, padTo, rule, safe, seconds, suggest, visibleWidth, waitForKey, wrapItems, wrapTo, type Colors } from "./term.ts";
 
 ignoreBrokenPipes();
@@ -230,7 +230,7 @@ function help(command?: Command): string {
     }
     if (command === "learn") {
       section("Bring your own AI");
-      paragraph("It uses the first one you already have: an API key, else the Claude Code or Codex you're signed in to (macOS and Linux): your subscription, no key. With an AI it reads what the product is for, names every action and reviews the screens for where a person gets stuck, waits, pays before seeing value or loses work; without one you still get every screen, action, and everything measured.");
+      paragraph("It uses the first one you already have: the Claude Code or Codex you're signed in to (your subscription, no key), else an API key, billed per token. With an AI it reads what the product is for, names every action and reviews the screens for where a person gets stuck, waits, pays before seeing value or loses work; without one you still get every screen, action, and everything measured.");
       section("How the sign-in is handled");
       paragraph("Nobody signs in by hand. On a local address, when it meets a sign-in, it reads your code (if you said yes at init, or pass --code), then walks the screens as a stand-in user with made-up data, starting as soon as it knows there's a sign-in, beside the public pressing: an app that decides who's signed in in the browser, with every data call answered in the browser and only your dev server's files loaded, so that user reaches no real server. Those screens are marked and say nothing about real data: only their layout, fixed wording and flow are ever reported. This adds up to two thirds of --minutes again, and the code is read alongside on a smaller model where your AI offers one, about 2 minutes the first time. What it can't read in time is left for the next run, and what hasn't changed isn't read again. On any other address there's no stand-in user: --login with a test account is the way past.");
       section("Journeys");
@@ -409,6 +409,7 @@ try {
 }
 // An agent asked for by name is run by its command: missing, it's said now, not as the first question failing.
 const agentCommand = ai?.agent && (aiChoice === "claude-code" || aiChoice === "codex") ? ai.agent : undefined;
+if (agentCommand && onPath(agentCommand) && !agentLaunch(agentCommand)) fail(`--ai ${aiChoice}: ${launcherUnreadable(agentCommand)}`, EXIT.usage);
 if (agentCommand && !onPath(agentCommand)) fail(`--ai ${aiChoice} needs the ${agentCommand} command on your PATH: install ${aiChoice === "codex" ? "Codex" : "Claude Code"} and sign in, or use --ai none`, EXIT.usage);
 const out = resolve(str("out") ?? "contextmachines");
 /** The output folder as the person would type it: relative to here, with forward slashes. */

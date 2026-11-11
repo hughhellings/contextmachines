@@ -250,8 +250,8 @@ With an AI, it says what the product is for, names every action and picks the ma
 
 | You have | It uses |
 | --- | --- |
-| Claude Code, signed in | Your Claude subscription. No key. (macOS and Linux) |
-| Codex, signed in | Your ChatGPT subscription. No key. (macOS and Linux) |
+| Claude Code, signed in | Your Claude subscription. No key. |
+| Codex, signed in | Your ChatGPT subscription. No key. |
 | `ANTHROPIC_API_KEY` | Anthropic, billed per token to that key |
 | `OPENAI_BASE_URL` | Any OpenAI-compatible server: Ollama, LM Studio, your company's proxy (with `--model`) |
 | `OPENAI_API_KEY` | OpenAI, billed per token |
@@ -361,7 +361,7 @@ Saves go through, so it can reach what only exists after creating something. A w
 - **A save an app makes by replacing rows ends the walk there,** as a `DELETE`. A background call to the app's own `/api` on a press can read as that press saving.
 - **The first file named for an item can be another screen's,** when the same words are on both.
 - **The stand-in user only knows `supabase-js` and a client app's own `/api`.** Other sign-in libraries stop with a clear message. For an API of its own, the made-up user's shape is a guess, so a screen needing more of it won't draw.
-- **It was tested on one real app.** That app used Vite and Supabase. Other frameworks were tried only on hand-written copies of how they behave, and Windows wasn't tried.
+- **It was tested on one real app.** That app used Vite and Supabase. Other frameworks were tried only on hand-written copies of how they behave. On Windows, its tests run on every change, and Claude Code and Codex installed there are started in CI; a whole run with a Windows sign-in hasn't been tried yet, so tell us how it goes.
 - **A local dev server on `https` with its own certificate won't work with the stand-in.** It ends with nothing reached, and nothing leaves.
 - **Page addresses are read once, signed out, before the stand-in opens them.** That's how it tells who decides. A read that might act is skipped, and so is anything your dev config says goes to another server. A proxy it can't read from your config would get that one signed-out GET, as it would from any visitor.
 - **A file only a dev server knows about can fail to load.** A file in no folder your app's own page loads from isn't believed to be a file. The screen may lose an image, or fail to draw and be reported as not reached.

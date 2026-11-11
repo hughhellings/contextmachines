@@ -18,6 +18,7 @@ import { emitKeypressEvents } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { agentEnv, AI_CHOICES, pickAi } from "./ai.ts";
+import { agentLaunch } from "./hand-off.ts";
 import { DEFAULT_URL, detectProject, listeners, notFoundWords, repoRootOf, servesPage, standInExpected, startDev, type Listener, type Project, type Started } from "./project.ts";
 import { publicUrl, startUrl } from "./report.ts";
 import { colors, colorWanted, columnsOf, fit, LiveRow, padTo, safe, suggest, wrapTo, type Colors } from "./term.ts";
@@ -144,7 +145,10 @@ const LIVE_PROBES: Probes = {
       // Run the way ai.ts runs them: away from this project, with no credential they don't need, and
       // Claude Code's telemetry, update check and error reports off, as on every ask.
       const env = command === "claude" ? { ...agentEnv(command), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" } : agentEnv(command);
-      const child = spawn(command, SIGNED_IN[command], { cwd: tmpdir(), env, stdio: "ignore", timeout: 8000 });
+      // Started as every ask starts it: never through a shell (see agentLaunch).
+      const launch = agentLaunch(command);
+      if (!launch) return done(false);
+      const child = spawn(launch.command, [...launch.args, ...SIGNED_IN[command]], { cwd: tmpdir(), env, stdio: "ignore", timeout: 8000, windowsHide: true });
       child.on("error", () => done(false));
       child.on("close", (code) => done(code === 0));
     }),

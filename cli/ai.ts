@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AskJson } from "../packages/understanding/src/features/describe.ts";
+import { agentLaunch, onPath } from "./hand-off.ts";
 
 export interface Ai extends AskJson {
   /** How it's named to the person: "Anthropic API", "your Claude Code sign-in". */
@@ -235,15 +236,12 @@ export function timedAi(ai: Ai, noted: AskTiming[], begun: number, part?: AskTim
 /** How long one AI answer may take: a local model loading, or a busy provider, but never forever. */
 export const ANSWER_TIMEOUT_MS = 5 * 60_000;
 
-/**
- * On Windows the Claude Code and Codex commands are .cmd shims, which Node only starts through a
- * shell; with the system prompt and site text on the command line that isn't safe, so those two
- * routes are for macOS and Linux, and Windows uses an API key.
- */
-const AGENTS_SUPPORTED = process.platform !== "win32";
-
 const keyFor = (names: string[]) => names.map((n) => process.env[n]).find((v) => v);
-const installed = (command: string) => AGENTS_SUPPORTED && spawnSync(command, ["--version"], { stdio: "ignore", timeout: 5000 }).status === 0;
+/** Whether the agent answers --version, started as every ask starts it: never through a shell (see agentLaunch). */
+const installed = (command: "claude" | "codex") => {
+  const launch = agentLaunch(command);
+  return Boolean(launch) && spawnSync(launch!.command, [...launch!.args, "--version"], { stdio: "ignore", timeout: 5000, windowsHide: true }).status === 0;
+};
 
 /**
  * The AI to use: the one asked for, else the first the person already has: an API key in the
@@ -255,7 +253,7 @@ export function pickAi(choice: string | undefined, model: string | undefined): A
   if (want === "none") return undefined;
   // Nothing chosen: a signed-in agent comes first, as init lists them, so a key left in the shell
   // never bills per token for a run your plan would have covered.
-  if (!want && AGENTS_SUPPORTED) {
+  if (!want) {
     if (installed("claude")) return model ? claudeCode(model) : withLight(claudeCode(undefined), claudeCode("haiku", "low"));
     if (installed("codex")) return codex(model);
   }
@@ -279,7 +277,6 @@ export function pickAi(choice: string | undefined, model: string | undefined): A
     }
   }
   if (want === "ollama") return compatible(OLLAMA.base, "ollama", model ?? OLLAMA.model, OLLAMA.via, "is it running? (ollama serve)");
-  if ((want === "claude-code" || want === "codex") && !AGENTS_SUPPORTED) throw new Error(`--ai ${want} works on macOS and Linux only for now: on Windows, use an API key (see --help)`);
   if (want === "claude-code" || (!want && installed("claude"))) return model ? claudeCode(model) : withLight(claudeCode(undefined), claudeCode("haiku", "low"));
   if (want === "codex" || (!want && installed("codex"))) return codex(model);
   return undefined;
@@ -415,14 +412,19 @@ function claudeCode(model: string | undefined, effort?: "low"): Ai {
     plan: true,
     agent: "claude",
     async ask(system, question, schema) {
+      // On Windows the instructions go in a file: its command line holds 32,767 characters in all.
+      const dir = process.platform === "win32" ? mkdtempSync(join(tmpdir(), "contextmachines-ask-")) : undefined;
+      if (dir) writeFileSync(join(dir, "system.txt"), system);
       // Telemetry, update checks and error reports off: each start cost ~9s of CPU, beside the browsers.
       const { out } = await run("claude", { ...agentEnv("claude"), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" }, [
-        "-p", "--output-format", "json", "--json-schema", JSON.stringify(schema), "--system-prompt", system,
+        "-p", "--output-format", "json", "--json-schema", JSON.stringify(schema), ...(dir ? ["--system-prompt-file", join(dir, "system.txt")] : ["--system-prompt", system]),
         // Only the question: no tools, settings, skills or connected servers of theirs.
         "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence",
         ...(model ? ["--model", model] : []),
         ...(effort ? ["--effort", effort] : []),
-      ], question);
+      ], question).finally(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+      });
       const reply = JSON.parse(out) as { is_error?: boolean; result?: string; structured_output?: unknown; usage?: Record<string, unknown>; modelUsage?: Record<string, Record<string, unknown>> };
       const usage = claudeCodeUsage(reply);
       if (reply.is_error) throw Object.assign(new Error(`Claude Code: ${reply.result ?? "failed"}${SIGN_IN.test(reply.result ?? "") ? ` (${SIGN_IN_HINT.claude})` : ""}`), usage ? { usage } : {});
@@ -572,6 +574,12 @@ export function failure(command: "claude" | "codex", code: number | null, err: s
   return `${command}: ${said.slice(0, 200)}${SIGN_IN.test(`${err}\n${out}`) ? ` (${SIGN_IN_HINT[command]})` : ""}`;
 }
 
+/** Said on Windows when the agent is there but its launcher can't be read, so it can't be started without a shell. */
+export function launcherUnreadable(command: "claude" | "codex"): string {
+  const install = command === "claude" ? "Claude Code's own installer, or npm i -g @anthropic-ai/claude-code" : "npm i -g @openai/codex";
+  return `the ${command} on your PATH starts through a launcher that can only run in cmd.exe, which isn't safe with a site's text: install it with ${install}, or use an API key (see --help)`;
+}
+
 /** Said when the agent's command can't be found, in place of Node's "spawn claude ENOENT". */
 export function commandMissing(command: "claude" | "codex"): string {
   const setUp = command === "claude" ? "install Claude Code and sign in" : "install Codex and run codex login";
@@ -584,7 +592,10 @@ export function commandMissing(command: "claude" | "codex"): string {
  */
 function run(command: "claude" | "codex", env: NodeJS.ProcessEnv, args: string[], input: string, cwd = tmpdir()): Promise<{ out: string; err: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+    // Never through a shell: the question and the site's words are in what it's given (see agentLaunch).
+    const launch = agentLaunch(command);
+    if (!launch) return reject(new Error(onPath(command) ? launcherUnreadable(command) : commandMissing(command)));
+    const child = spawn(launch.command, [...launch.args, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     let out = "";
     let err = "";
     let timedOut = false;

@@ -88,6 +88,26 @@ jobs:
           test "$got" = "contextmachines $want" || { echo "::error::--version said '$got', expected 'contextmachines $want'"; exit 1; }
           node cli/dist/bin.mjs --help > /dev/null
           node cli/dist/bin.mjs learn --help > /dev/null
+      # The real Claude Code and Codex, as npm installs them on Windows: found through their .cmd
+      # launchers and started with no shell, as every ask starts them. Signing in can't be tried here.
+      - name: Claude Code and Codex start on Windows without a shell
+        if: runner.os == 'Windows'
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/agents" --no-audit --no-fund @anthropic-ai/claude-code@2.1.322 @openai/codex@0.167.1
+          AGENTS_BIN="$RUNNER_TEMP/agents" node --input-type=module -e '
+            import { spawnSync } from "node:child_process";
+            import { agentLaunch } from "./cli/hand-off.ts";
+            for (const agent of ["claude", "codex"]) {
+              const launch = agentLaunch(agent, { PATH: process.env.AGENTS_BIN }, "win32");
+              if (!launch) {
+                console.log(`::error::${agent}: its launcher in ${process.env.AGENTS_BIN} could not be read`);
+                process.exit(1);
+              }
+              const run = spawnSync(launch.command, [...launch.args, "--version"], { encoding: "utf8", timeout: 60000 });
+              console.log(agent, JSON.stringify(launch), "exit", run.status, (run.stdout || run.stderr || "").trim());
+              if (run.status !== 0) process.exit(1);
+            }
+          '
 
   package:
     name: Pack and run on Node ${{ matrix.node }}

@@ -8,8 +8,8 @@
  * Starting their agent on their repository is that person's own keypress, so nothing more is asked.
  */
 import { spawn as spawnChild, spawnSync as spawnChildSync, type SpawnOptions, type SpawnSyncOptions } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { accessSync, constants, readFileSync, statSync } from "node:fs";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { visibleWidth, type Colors, type KeyEnd, type MenuKey } from "./term.ts";
 
 /** A coding agent's command, as the run's AI used it (--ai claude-code or --ai codex). */
@@ -48,12 +48,72 @@ export function onPath(command: string, env: NodeJS.ProcessEnv = process.env, pl
   return false;
 }
 
+/** A program and the words it starts with, to which the rest are added. */
+export interface Launch {
+  command: string;
+  args: string[];
+}
+
+const isFile = (file: string) => {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * How to start an agent with no shell between it and what it's given. On macOS and Linux, by its name.
+ * On Windows, the file the shell would run (the first PATH folder that has one, by PATHEXT's order):
+ * a program as it is, or what its .cmd or .bat launcher runs, read from the launcher. A launcher only
+ * starts through cmd.exe, which reads & | % ^ and quotes in its arguments, and those carry site text.
+ * Undefined on Windows when it isn't installed, or when the first one found is a launcher this can't
+ * read: never a different install further down PATH than the one the person's own `claude` runs.
+ */
+export function agentLaunch(agent: Agent, env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Launch | undefined {
+  if (platform !== "win32") return { command: agent, args: [] };
+  const endings = (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").map((e) => e.toLowerCase()).filter((e) => [".com", ".exe", ".bat", ".cmd"].includes(e));
+  for (const raw of (env.PATH ?? env.Path ?? "").split(";")) {
+    // As written, quotes and all; a folder relative to wherever the shell is isn't one to copy.
+    const dir = raw.trim().replace(/^"(.*)"$/, "$1");
+    if (!dir || !isAbsolute(dir)) continue;
+    for (const ending of endings) {
+      const file = join(dir, `${agent}${ending}`);
+      if (!isFile(file)) continue;
+      return ending === ".exe" || ending === ".com" ? { command: file, args: [] } : shimTarget(file);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * What a .cmd or .bat launcher (npm's, pnpm's or yarn's) runs: the last "%dp0%\\…" or "%~dp0\\…" file
+ * it names that isn't the Node beside it. A script is run by this Node, a program as it is, and a
+ * launcher it hands on to is read in turn (yarn's), up to a few deep. Undefined when it names none
+ * that exists.
+ */
+export function shimTarget(file: string, text?: string, depth = 0): Launch | undefined {
+  let body = text;
+  try {
+    body ??= readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+  const named = [...body.matchAll(/"%~?dp0%?\\([^"%]+?\.(?:js|cjs|mjs|exe|cmd|bat))"/gi)].map((m) => m[1]!).filter((path) => !/(^|\\)node\.exe$/i.test(path));
+  const last = named.at(-1);
+  if (!last) return undefined;
+  const target = resolve(dirname(file), ...last.split("\\"));
+  if (!isFile(target)) return undefined;
+  if (/\.(?:cmd|bat)$/i.test(target)) return depth < 3 ? shimTarget(target, undefined, depth + 1) : undefined;
+  return /\.exe$/i.test(target) ? { command: target, args: [] } : { command: process.execPath, args: [target] };
+}
+
 /**
  * The agent to hand the list to: only the one the run itself used, and only when its command is on
  * PATH. With an API key there's no agent, and none is guessed: a person with two would be surprised.
  */
 export function agentFor(used: Agent | undefined, env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Agent | undefined {
-  return used && platform !== "win32" && onPath(used, env, platform) ? used : undefined;
+  return used && onPath(used, env, platform) && agentLaunch(used, env, platform) ? used : undefined;
 }
 
 /**
@@ -144,7 +204,9 @@ export function startAgent(agent: Agent, prompt: string, { model, spawn = spawnC
       resolve(code);
     };
     try {
-      const child = spawn(agent, [...(model ? [agent === "codex" ? "-m" : "--model", model] : []), prompt], { stdio: "inherit", env });
+      const launch = agentLaunch(agent, env);
+      if (!launch) return end(127);
+      const child = spawn(launch.command, [...launch.args, ...(model ? [agent === "codex" ? "-m" : "--model", model] : []), prompt], { stdio: "inherit", env });
       child.on("error", () => end(127));
       child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => end(code ?? (signal === "SIGINT" ? 130 : 1)));
     } catch {

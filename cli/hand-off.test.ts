@@ -11,7 +11,7 @@ import { after, describe, it } from "node:test";
 import { stripVTControlCharacters } from "node:util";
 import type { ScreenCheck } from "@contextmachines/scanner";
 import { buildFixes } from "./brief.ts";
-import { AGENT_NAMES, agentFor, agentHere, clipboardFor, copyText, endMenu, fixPrompt, menuKeys, menuLine, onPath, openerFor, openFile, startAgent, type MenuOffer } from "./hand-off.ts";
+import { AGENT_NAMES, agentFor, agentHere, agentLaunch, clipboardFor, copyText, endMenu, fixPrompt, menuKeys, menuLine, onPath, openerFor, openFile, startAgent, type MenuOffer } from "./hand-off.ts";
 import { hasAppCode } from "./project.ts";
 import { AGENT_WORDS, fixDoc, fixLines, forPasting, jpegSize, moreFixLines, onPhoto, outInUse, problemWords, reportPage, type Fix, type ProductMap } from "./report.ts";
 import { colors, cut, fit, linked, linksWanted, visibleWidth, waitForKey, wrapTo, type KeyEnd, type MenuKey } from "./term.ts";
@@ -200,12 +200,47 @@ describe("handing the list to the coding agent", () => {
       assert.equal(fake.said().trim(), "fix it");
     }
   });
-  it("never guesses: no agent with an API key, none that isn't on PATH, none on Windows", () => {
+  it("never guesses: no agent with an API key, none that isn't on PATH, none on Windows it can't start without a shell", () => {
     const fake = fakeCommand("codex");
     assert.equal(agentFor(undefined, { PATH: fake.bin }, "darwin"), undefined, "an API key's run");
     assert.equal(agentFor("claude", { PATH: fake.bin }, "darwin"), undefined, "the run's agent isn't there");
     assert.equal(agentFor("codex", { PATH: fake.bin }, "darwin"), "codex");
-    assert.equal(agentFor("codex", { PATH: fake.bin }, "win32"), undefined);
+    assert.equal(agentFor("codex", { PATH: fake.bin }, "win32"), undefined, "no .exe, nor a .cmd launcher to read");
+    // As npm installs it on Windows: a .cmd naming the script it runs, which is run by Node instead.
+    const bin = folder();
+    mkdirSync(join(bin, "node_modules", "codex", "bin"), { recursive: true });
+    writeFileSync(join(bin, "node_modules", "codex", "bin", "codex.js"), "");
+    writeFileSync(join(bin, "codex.cmd"), `@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\codex\\bin\\codex.js" %*\r\n`);
+    assert.equal(agentFor("codex", { PATH: bin, PATHEXT: ".EXE;.CMD" }, "win32"), "codex");
+    assert.deepEqual(agentLaunch("codex", { PATH: bin }, "win32"), { command: process.execPath, args: [join(bin, "node_modules", "codex", "bin", "codex.js")] });
+    writeFileSync(join(bin, "claude.exe"), "");
+    assert.deepEqual(agentLaunch("claude", { PATH: bin }, "win32"), { command: join(bin, "claude.exe"), args: [] }, "Claude Code's own installer: the program itself");
+  });
+  it("on Windows, starts only what the shell itself would run", () => {
+    const first = folder();
+    const later = folder();
+    writeFileSync(join(later, "claude.exe"), "");
+    // A wrapper of the person's own, first on PATH, that this can't read: never the other install instead.
+    writeFileSync(join(first, "claude.cmd"), `@set HTTPS_PROXY=http://proxy:8080\r\n@"C:\\Tools\\claude.exe" %*\r\n`);
+    assert.equal(agentLaunch("claude", { PATH: `${first};${later}` }, "win32"), undefined);
+    assert.deepEqual(agentLaunch("claude", { PATH: `"${later}"` }, "win32"), { command: join(later, "claude.exe"), args: [] }, "a quoted folder is still that folder");
+    assert.equal(agentLaunch("claude", { PATH: "relative-bin" }, "win32"), undefined, "a folder relative to wherever the shell is");
+    // A .bat counts, in PATHEXT's order.
+    const bat = folder();
+    mkdirSync(join(bat, "node_modules", "c"), { recursive: true });
+    writeFileSync(join(bat, "node_modules", "c", "cli.js"), "");
+    writeFileSync(join(bat, "claude.bat"), `@"%~dp0\\node_modules\\c\\cli.js" %*\r\n`);
+    assert.deepEqual(agentLaunch("claude", { PATH: bat }, "win32")?.args, [join(bat, "node_modules", "c", "cli.js")]);
+    assert.equal(agentLaunch("claude", { PATH: bat, PATHEXT: ".EXE;.CMD" }, "win32"), undefined, "nor one PATHEXT leaves out");
+    // yarn's launcher hands on to another, which names the script.
+    const yarn = folder();
+    mkdirSync(join(yarn, "Data", "global", "node_modules", ".bin"), { recursive: true });
+    mkdirSync(join(yarn, "Data", "global", "node_modules", "@anthropic-ai", "claude-code"), { recursive: true });
+    writeFileSync(join(yarn, "Data", "global", "node_modules", "@anthropic-ai", "claude-code", "cli.js"), "");
+    writeFileSync(join(yarn, "Data", "global", "node_modules", ".bin", "claude.cmd"), `@"%~dp0\\..\\@anthropic-ai\\claude-code\\cli.js" %*\r\n`);
+    mkdirSync(join(yarn, "bin"));
+    writeFileSync(join(yarn, "bin", "claude.cmd"), `@"%~dp0\\..\\Data\\global\\node_modules\\.bin\\claude.cmd" %*\r\n`);
+    assert.deepEqual(agentLaunch("claude", { PATH: join(yarn, "bin") }, "win32"), { command: process.execPath, args: [join(yarn, "Data", "global", "node_modules", "@anthropic-ai", "claude-code", "cli.js")] });
   });
   it("lets a Ctrl-C pass to the agent while it runs, and listens no longer after", POSIX_ONLY, async () => {
     const fake = fakeCommand("claude");

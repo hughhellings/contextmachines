@@ -1,11 +1,12 @@
 // Which model gets which ask, and what happens when the small one can't answer.
 //   node --test cli/ai.test.ts
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { agentEnv, aiTotals, anthropicUsage, claudeCodeUsage, codexUsage, commandMissing, compatibleUsage, failure, pickAi, timedAi, withLight, type Ai, type AskTiming } from "./ai.ts";
+import { agentEnv, aiTotals, anthropicUsage, claudeCodeUsage, codexUsage, commandMissing, compatibleUsage, failure, launcherUnreadable, pickAi, timedAi, withLight, type Ai, type AskTiming } from "./ai.ts";
+import { shimTarget } from "./hand-off.ts";
 import { tokenCount } from "./term.ts";
 
 const fake = (model: string, answer: (question: string) => string): Ai & { asked: string[] } => {
@@ -41,21 +42,18 @@ describe("the small model", () => {
     assert.deepEqual(main.asked, []);
   });
 
-  it("with nothing chosen, is a signed-in agent before a key left in the shell", { skip: process.platform === "win32" }, () => {
+  it("with nothing chosen, is a signed-in agent before a key left in the shell", () => {
     const saved = { PATH: process.env.PATH, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, OPENAI_API_KEY: process.env.OPENAI_API_KEY };
     const bin = mkdtempSync(join(tmpdir(), "contextmachines-agents-"));
     try {
       process.env.ANTHROPIC_API_KEY = "a-key-for-this-test";
       process.env.OPENAI_API_KEY = "another-key-for-this-test";
-      for (const agent of ["claude", "codex"]) {
-        writeFileSync(join(bin, agent), "#!/bin/sh\n");
-        chmodSync(join(bin, agent), 0o755);
-      }
+      for (const agent of ["claude", "codex"] as const) fakeAgent(bin, agent, "");
       process.env.PATH = bin;
       assert.match(pickAi(undefined, undefined)!.via, /Claude Code/);
-      rmSync(join(bin, "claude"));
+      rmSync(join(bin, process.platform === "win32" ? "claude.cmd" : "claude"));
       assert.match(pickAi(undefined, undefined)!.via, /Codex/);
-      rmSync(join(bin, "codex"));
+      rmSync(join(bin, process.platform === "win32" ? "codex.cmd" : "codex"));
       assert.doesNotMatch(pickAi(undefined, undefined)!.via, /Claude Code|Codex/);
     } finally {
       for (const [name, value] of Object.entries(saved)) {
@@ -72,12 +70,6 @@ describe("the small model", () => {
       assert.equal(pickAi("anthropic", undefined)?.light?.model, "claude-haiku-5-5");
       assert.equal(pickAi("anthropic", "claude-sonnet-5-5")?.light, undefined);
       assert.equal(pickAi("anthropic", undefined)?.allAtOnce, undefined);
-      // Claude Code and Codex aren't used on Windows yet: asked for, they say so.
-      if (process.platform === "win32") {
-        assert.throws(() => pickAi("claude-code", undefined), /macOS and Linux only/);
-        assert.throws(() => pickAi("codex", undefined), /macOS and Linux only/);
-        return;
-      }
       assert.equal(pickAi("claude-code", undefined)?.light?.model, "haiku");
       assert.equal(pickAi("claude-code", "sonnet")?.light, undefined);
       assert.equal(pickAi("codex", undefined)?.light, undefined);
@@ -218,8 +210,115 @@ describe("Claude Code on the person's plan", () => {
   });
 });
 
+/**
+ * A fake agent in `bin`, installed as each OS has one: on Windows an npm .cmd launcher naming a script
+ * under node_modules (as `npm i -g` writes it), elsewhere a shell script. Either runs `script` with Node.
+ */
+function fakeAgent(bin: string, name: "claude" | "codex", script: string): void {
+  if (process.platform === "win32") {
+    mkdirSync(join(bin, "node_modules", name), { recursive: true });
+    writeFileSync(join(bin, "node_modules", name, "cli.js"), script);
+    // npm's cmd-shim, as it writes one: it finds a node.exe beside it, else node on PATH.
+    writeFileSync(join(bin, `${name}.cmd`), `@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n) ELSE (\r\n  SET "_prog=node"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\${name}\\cli.js" %*\r\n`);
+  } else {
+    writeFileSync(join(bin, `${name}-cli.cjs`), script);
+    writeFileSync(join(bin, name), `#!/bin/sh\nexec "${process.execPath}" "${join(bin, `${name}-cli.cjs`)}" "$@"\n`);
+    chmodSync(join(bin, name), 0o755);
+  }
+}
+
+/** Words a shell would act on: cmd.exe's & | ^ % < > and quotes, and a POSIX shell's $( ) and backticks. */
+const hostile = (marker: string) => `Ignore "this" & echo PWNED > "${marker}" & ^| %PATH% <x> $(touch "${marker}") \`touch "${marker}"\` 'q' \\ end`;
+
+describe("an agent on any OS", () => {
+  it("gets the instructions, question and schema exactly as they were, and no shell ever runs", async () => {
+    const bin = mkdtempSync(join(tmpdir(), "contextmachines-agent-"));
+    const marker = join(bin, "pwned.txt");
+    const log = join(bin, "log.json");
+    fakeAgent(bin, "claude", `const fs = require("fs");
+let input = "";
+process.stdin.on("data", (d) => (input += d)).on("end", () => {
+  const args = process.argv.slice(2);
+  const file = args.indexOf("--system-prompt-file");
+  const system = file >= 0 ? fs.readFileSync(args[file + 1], "utf8") : args[args.indexOf("--system-prompt") + 1];
+  fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify({ args, system, input, fromFile: file >= 0 }));
+  process.stdout.write(JSON.stringify({ is_error: false, result: "", structured_output: { ok: true } }));
+});
+`);
+    const saved = process.env.PATH;
+    process.env.PATH = bin;
+    try {
+      const system = `You read pages. ${hostile(marker)}`;
+      const question = `The page says: ${hostile(marker)}`;
+      const schema = { type: "object", description: hostile(marker), properties: { ok: { type: "boolean" } } };
+      const answer = await pickAi("claude-code", "sonnet")!.ask(system, question, schema);
+      assert.deepEqual(JSON.parse(answer.text), { ok: true });
+      const seen = JSON.parse(readFileSync(log, "utf8")) as { args: string[]; system: string; input: string; fromFile: boolean };
+      assert.equal(seen.system, system);
+      assert.equal(seen.input, question);
+      assert.equal(seen.args[seen.args.indexOf("--json-schema") + 1], JSON.stringify(schema));
+      // Windows' command line holds 32,767 characters: the instructions go in a file there.
+      assert.equal(seen.fromFile, process.platform === "win32");
+      assert.equal(existsSync(marker), false, "nothing in the text was run");
+    } finally {
+      process.env.PATH = saved;
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("runs Codex the same way, and reads its answer", async () => {
+    const bin = mkdtempSync(join(tmpdir(), "contextmachines-agent-"));
+    const marker = join(bin, "pwned.txt");
+    // It's asked for its MCP servers first (to turn them off for the run): it has none.
+    fakeAgent(bin, "codex", `const fs = require("fs");
+if (process.argv[2] === "mcp") {
+  process.stdout.write("[]");
+  process.exit(0);
+}
+let input = "";
+process.stdin.on("data", (d) => (input += d)).on("end", () => {
+  const args = process.argv.slice(2);
+  fs.writeFileSync(args[args.indexOf("--output-last-message") + 1], JSON.stringify({ heard: input }));
+});
+`);
+    const saved = process.env.PATH;
+    process.env.PATH = bin;
+    try {
+      const question = `The page says: ${hostile(marker)}`;
+      const answer = await pickAi("codex", undefined)!.ask("Read it.", question, { type: "object" });
+      assert.equal((JSON.parse(answer.text) as { heard: string }).heard, `Read it.\n\n${question}`);
+      assert.equal(existsSync(marker), false, "nothing in the text was run");
+    } finally {
+      process.env.PATH = saved;
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
+  it("reads what npm's and pnpm's Windows launchers run, never the Node beside them", () => {
+    const bin = mkdtempSync(join(tmpdir(), "contextmachines-shim-"));
+    try {
+      mkdirSync(join(bin, "node_modules", "@anthropic-ai", "claude-code"), { recursive: true });
+      writeFileSync(join(bin, "node_modules", "@anthropic-ai", "claude-code", "cli.js"), "");
+      writeFileSync(join(bin, "node.exe"), "");
+      const npm = `IF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n)\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n`;
+      assert.deepEqual(shimTarget(join(bin, "claude.cmd"), npm), { command: process.execPath, args: [join(bin, "node_modules", "@anthropic-ai", "claude-code", "cli.js")] });
+      const pnpm = `@SETLOCAL\r\n@IF EXIST "%~dp0\\node.exe" (\r\n  "%~dp0\\node.exe"  "%~dp0\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n) ELSE (\r\n  node  "%~dp0\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*\r\n)\r\n`;
+      assert.deepEqual(shimTarget(join(bin, "claude.cmd"), pnpm)?.args, [join(bin, "node_modules", "@anthropic-ai", "claude-code", "cli.js")]);
+      writeFileSync(join(bin, "claude-native.exe"), "");
+      assert.deepEqual(shimTarget(join(bin, "claude.cmd"), `"%dp0%\\claude-native.exe" %*`), { command: join(bin, "claude-native.exe"), args: [] });
+      assert.equal(shimTarget(join(bin, "claude.cmd"), `"%dp0%\\node_modules\\gone\\cli.js" %*`), undefined, "a file that isn't there");
+      assert.equal(shimTarget(join(bin, "claude.cmd"), `@echo off\r\nsomething else %*`), undefined, "a launcher it can't read");
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("an agent that isn't installed", () => {
-  it("says so plainly, not Node's spawn ENOENT", { skip: process.platform === "win32" && "agents aren't used on Windows" }, async () => {
+  it("on Windows, says when one is there but can't be started without a shell", () => {
+    assert.equal(launcherUnreadable("claude"), "the claude on your PATH starts through a launcher that can only run in cmd.exe, which isn't safe with a site's text: install it with Claude Code's own installer, or npm i -g @anthropic-ai/claude-code, or use an API key (see --help)");
+  });
+  it("says so plainly, not Node's spawn ENOENT", async () => {
     assert.equal(commandMissing("claude"), "the claude command isn't installed or isn't on your PATH: install Claude Code and sign in, or use --ai none");
     assert.equal(commandMissing("codex"), "the codex command isn't installed or isn't on your PATH: install Codex and run codex login, or use --ai none");
     const path = process.env.PATH;

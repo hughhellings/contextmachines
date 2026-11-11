@@ -36,7 +36,7 @@ describe("an AI named that isn't here", () => {
   // PATH holds only an empty folder: node itself is run by its full path.
   const bare = { ...plainEnv(), PATH: join(dir, "bin") };
   mkdirSync(join(dir, "bin"));
-  it("stops before the run with exit 2 and what to do", { skip: process.platform === "win32" ? "agents are macOS and Linux only" : false }, () => {
+  it("stops before the run with exit 2 and what to do", () => {
     const claude = run(dir, ["learn", "x.test", "--ai", "claude-code"], bare);
     assert.equal(claude.code, 2, claude.err);
     assert.match(claude.err, /--ai claude-code needs the claude command on your PATH: install Claude Code and sign in, or use --ai none/);
@@ -44,11 +44,19 @@ describe("an AI named that isn't here", () => {
     assert.equal(codex.code, 2, codex.err);
     assert.match(codex.err, /--ai codex needs the codex command on your PATH/);
   });
-  it("goes on when the command is there", { skip: process.platform === "win32" ? "agents are macOS and Linux only" : false }, () => {
-    writeFileSync(join(dir, "bin", "claude"), "#!/bin/sh\nexit 0\n");
-    chmodSync(join(dir, "bin", "claude"), 0o755);
-    // An --out it can't write to stops it at the next check, before any browser.
-    const r = run(dir, ["learn", "x.test", "--ai", "claude-code", "--out", "/dev/null/x"], bare);
+  it("goes on when the command is there", () => {
+    if (process.platform === "win32") {
+      // As npm installs it on Windows: a .cmd launcher naming the script it runs.
+      mkdirSync(join(dir, "bin", "node_modules", "claude"), { recursive: true });
+      writeFileSync(join(dir, "bin", "node_modules", "claude", "cli.js"), "");
+      writeFileSync(join(dir, "bin", "claude.cmd"), `@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\claude\\cli.js" %*\r\n`);
+    } else {
+      writeFileSync(join(dir, "bin", "claude"), "#!/bin/sh\nexit 0\n");
+      chmodSync(join(dir, "bin", "claude"), 0o755);
+    }
+    // An --out it can't write to (inside a file) stops it at the next check, before any browser.
+    writeFileSync(join(dir, "a-file"), "");
+    const r = run(dir, ["learn", "x.test", "--ai", "claude-code", "--out", join(dir, "a-file", "x")], bare);
     assert.doesNotMatch(r.err, /needs the claude command/);
     assert.match(r.err, /Can't write to/);
   });

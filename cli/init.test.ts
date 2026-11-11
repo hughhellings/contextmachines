@@ -127,8 +127,7 @@ describe("what it finds", () => {
   it("offers what's here in a fixed order: agents, keys, Ollama, then None", async () => {
     for (const name of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "AI_GATEWAY_API_KEY", "OPENROUTER_API_KEY"]) process.env[name] = "k";
     const found = await detectAi({ agentSignedIn: async () => true, ollamaRunning: async () => true });
-    // Claude Code and Codex aren't offered on Windows yet (ai.ts).
-    const agents = process.platform === "win32" ? [] : ["claude-code", "codex"];
+    const agents = ["claude-code", "codex"];
     assert.deepEqual(found.map((o) => o.choice), [...agents, "anthropic", "openai", "google", "gateway", "openrouter", "ollama", "none"]);
     assert.ok(found.slice(0, -1).every((o) => o.hint === "found"));
     assert.equal(found.at(-1)!.hint, "screens, actions and issues only");
@@ -139,7 +138,7 @@ describe("what it finds", () => {
   it("offers only what's really there", async () => {
     process.env.OPENROUTER_API_KEY = "k";
     const found = await detectAi({ agentSignedIn: async (command) => command === "codex", ollamaRunning: async () => false });
-    assert.deepEqual(found.map((o) => o.choice), [...(process.platform === "win32" ? [] : ["codex"]), "openrouter", "none"]);
+    assert.deepEqual(found.map((o) => o.choice), ["codex", "openrouter", "none"]);
   });
 
   it("doesn't call a key OpenAI's when OPENAI_BASE_URL sends it elsewhere", async () => {

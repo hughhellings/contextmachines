@@ -4,6 +4,10 @@ What changed in each release, for the people running it. Versions follow [semant
 
 ## Unreleased
 
+## 0.1.4 - 2026-11-11
+
+- **Claude Code and Codex on Windows.** Your Claude or ChatGPT subscription now works on Windows too, as on macOS and Linux: no API key needed. Their Windows launchers can only start through cmd.exe, which would act on characters in a site's text, so it starts the program behind each one directly, with no shell, and gives Claude Code its instructions in a file. `f` hands the list to them on Windows too. CI starts both as npm installs them on Windows; a whole run there with a sign-in hasn't been tried yet.
+
 ## 0.1.3 - 2026-11-11
 
 - **The first run just works.** `learn` on a machine with no browser yet used to stop and tell you to run `npx playwright install chromium`. In a terminal it now offers the one-time download (about 270 MB), with a yes, and carries on. In CI or a pipe it still says how, as before.
