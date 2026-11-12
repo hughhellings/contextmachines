@@ -4,6 +4,8 @@
 
 Finds what to fix in your web app. In a few minutes it walks your product the way a new user would, and gives you a short list to hand to your coding agent: problems it proved, and predictions marked as such, each with a file and line where it can find one.
 
+![Context Machines on a demo app: it walks the app, proves the "Import invoices" button does nothing, points to the line, Claude Code fixes it, and a second run finds nothing left](https://raw.githubusercontent.com/hughhellings/contextmachines/main/.github/assets/demo.gif)
+
 The new-user walk works on your own machine where the browser decides who's signed in: `supabase-js` in a client-rendered app, or a client-rendered app that asks its own `/api`. For anything else, use `--login` with a test account.
 
 From your app's folder, while it runs:
@@ -84,6 +86,14 @@ Its colours are your terminal's own 16, as a test runner's are, so they follow y
 | `screens/` | A photo of each screen |
 
 [examples/invoice](https://github.com/hughhellings/contextmachines/blob/main/examples/invoice) has that run's `PRODUCT.md`, `map.json` and photos, and the app itself, to try it on.
+
+## How is this different?
+
+- **From asking Claude Code or Codex to find bugs:** they read your code. This uses your app, in a real browser, and only calls something broken when it saw it happen. Then it hands them what it proved, with the evidence and the line.
+- **From Playwright or Cypress tests:** there's nothing to write or keep up to date. It explores like someone who has never seen the app, so it finds what nobody thought to test.
+- **From hosted AI testing services:** those run the steps you describe, on their servers. This explores with no script, on your machine, with the AI plan you already pay for. It's free and open source, with no account.
+
+It isn't a replacement for your tests. It's the new user you don't have, before your real ones arrive.
 
 ## Behind a sign-in
 
