@@ -9,12 +9,13 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run && node --test action/run.test.ts cli/ai.test.ts cli/brief.test.ts cli/cli-run.test.ts cli/code-map.test.ts cli/end-of-run.test.ts cli/fix-list.test.ts cli/hand-off.test.ts cli/init.test.ts cli/learn-screens.test.ts cli/learn-wall.test.ts cli/predictions.test.ts cli/project.test.ts cli/repo.test.ts cli/report.test.ts cli/run-screen.test.ts cli/understand.test.ts",
+    "test": "vitest run && node --test action/ci/github.test.ts action/ci/report.test.ts action/ci/review.test.ts action/ci/run.test.ts action/ci/simulate.test.ts action/ci/twopass.test.ts action/run.test.ts cli/a11y.test.ts cli/access.test.ts cli/ai.test.ts cli/anysite-fixes.test.ts cli/auth.test.ts cli/botwall.test.ts cli/brief.test.ts cli/choice.test.ts cli/cli-run.test.ts cli/code-map.test.ts cli/codes.test.ts cli/cover.test.ts cli/datebox.test.ts cli/dots.test.ts cli/end-of-run.test.ts cli/fill.test.ts cli/fix-list.test.ts cli/hand-off.test.ts cli/honest.test.ts cli/identity.test.ts cli/init.test.ts cli/judge.test.ts cli/knowledge.test.ts cli/learn-screens.test.ts cli/learn-wall.test.ts cli/login-parity.test.ts cli/mapmode.test.ts cli/mapscore.test.ts cli/mcp.test.ts cli/pay-run.test.ts cli/paymode.test.ts cli/predictions.test.ts cli/project.test.ts cli/proof-shapes.test.ts cli/proof-zoo.test.ts cli/proof.test.ts cli/repo.test.ts cli/report.test.ts cli/review-fixes.test.ts cli/robust.test.ts cli/run-screen.test.ts cli/sdk/brain.test.ts cli/sdk/review.test.ts cli/sdk/sdk.test.ts cli/sdk/signin.test.ts cli/seeing.test.ts cli/shot.test.ts cli/signed-in-plan.test.ts cli/signin-ok.test.ts cli/speed.test.ts cli/stale.test.ts cli/test-tasks.test.ts cli/tester.test.ts cli/ui-accounts.test.ts cli/ui.test.ts cli/understand.test.ts cli/vision.test.ts cli/w4-actions.test.ts cli/wizard.test.ts cli/zoo.test.ts",
     "build:snippet": "npm run build -w @contextmachines/snippet",
     "build": "npm run build -w cli --",
     "check": "npm run typecheck && npm run build:snippet && npm test && npm run build"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "fast-check": "^4.10.2",

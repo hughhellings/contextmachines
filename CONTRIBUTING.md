@@ -121,7 +121,7 @@ Keep them small and say what changed for the person running it. `npm run check` 
 
 ## Releases
 
-A maintainer releases by moving the `## Unreleased` notes under a new `## x.y.z - <date>` heading in `CHANGELOG.md`, setting `action/version.txt` to the same version, and pushing a `vx.y.z` tag. The release workflow checks the tag against both, builds and packs that version, tries the packed package on the example app, publishes it to npm with Trusted Publishing (the npm package's trusted publisher must be set to this repository's `release.yml`), makes the GitHub release from the CHANGELOG section, and moves the Action's tag. While it is 0.x that tag follows the minor (`v0.1` moves to 0.1.1, 0.1.2…; 0.2.0 starts `v0.2` and leaves `v0.1` alone), from 1.0.0 the major (`v1`); it only ever moves forward, and a pre-release moves none.
+A maintainer releases by moving the `## Unreleased` notes under a new `## x.y.z - <date>` heading in `CHANGELOG.md`, setting `action/version.txt` and `action/ci/version.txt` to the same version, and pushing a `vx.y.z` tag. The release workflow checks the tag against both, builds and packs that version, tries the packed package on the example app, publishes it to npm with Trusted Publishing (the npm package's trusted publisher must be set to this repository's `release.yml`), makes the GitHub release from the CHANGELOG section, and moves the Action's tag. While it is 0.x that tag follows the minor (`v0.1` moves to 0.1.1, 0.1.2…; 0.2.0 starts `v0.2` and leaves `v0.1` alone), from 1.0.0 the major (`v1`); it only ever moves forward, and a pre-release moves none.
 
 ## License
 

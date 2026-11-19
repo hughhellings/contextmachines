@@ -333,7 +333,7 @@ export function journeyMap(report: JourneyReport, clean: (text: string) => strin
   return {
     ...kept,
     journeys: kept.journeys.map((journey) => ({
-      ...journey, name: clean(journey.name), from: clean(journey.from),
+      ...journey, name: clean(journey.name), from: clean(journey.from), ...(journey.ends ? { ends: clean(journey.ends) } : {}),
       ...(journey.stop ? { stop: { ...journey.stop, label: clean(journey.stop.label) } } : {}),
       ...(journey.pick ? { pick: { ...journey.pick, label: clean(journey.pick.label) } } : {}),
       ...(journey.because ? { because: clean(journey.because) } : {}),
@@ -1877,8 +1877,12 @@ export function filesToClear(earlier: { manifest?: string; map?: string }, writt
   return [...new Set(listed.filter(ours))].filter((f) => !writtenNow.includes(f));
 }
 
-/** What a run puts in its folder, and nothing else: a folder holding only these is a run's, even one an older run wrote before the marker. */
-const OUR_NAMES = new Set([MANIFEST, ".gitignore", ".session.json", ".reading.json", ".code-read.json", ".review.json", "map.json", "PRODUCT.md", "PRODUCT.new.md", "FIX.md", "report.html", "screens"]);
+/**
+ * What a run puts in its folder, and nothing else: a folder holding only these is a run's, even one an
+ * older run wrote before the marker. `test` writes runs/, tests/ and .auth/ (a signed-in session) here
+ * too, and `learn` writes its starter tests into tests/, so a folder `test` has run in is ours.
+ */
+const OUR_NAMES = new Set([MANIFEST, ".gitignore", ".session.json", ".reading.json", ".code-read.json", ".review.json", "map.json", "PRODUCT.md", "PRODUCT.new.md", "FIX.md", "report.html", "screens", "runs", "tests", ".auth"]);
 
 /** What a file browser leaves in any folder it has shown: nobody's files. */
 const OS_NAMES = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);

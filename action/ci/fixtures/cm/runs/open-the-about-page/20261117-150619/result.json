@@ -1,0 +1,47 @@
+{
+  "goal": "open the about page",
+  "url": "http://localhost:50923/",
+  "verdict": "pass",
+  "steps": [
+    {
+      "n": 1,
+      "title": "open the about page",
+      "intent": "open the about page",
+      "check": {
+        "kind": "url_contains",
+        "text": "/about"
+      },
+      "verdict": "passed",
+      "actions": [
+        {
+          "label": "Clicking on 'About' link",
+          "at": 1.134,
+          "cached": true
+        }
+      ],
+      "ms": 825,
+      "at": 0.318,
+      "screenshot": "step-1.jpg",
+      "replayed": true
+    }
+  ],
+  "passed": 1,
+  "ms": 1387,
+  "startedAt": "2026-11-17T15:06:19.826Z",
+  "video": "run.webm",
+  "actions": 1,
+  "replay": true,
+  "friction": [],
+  "endUrl": "http://localhost:50923/about",
+  "urls": [
+    {
+      "t": 0.31,
+      "url": "http://localhost:50923/"
+    },
+    {
+      "t": 0.368,
+      "url": "http://localhost:50923/about"
+    }
+  ],
+  "ai": null
+}

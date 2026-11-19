@@ -1,0 +1,188 @@
+name: Context Machines saved tests
+description: >-
+  Runs the saved tests in the repository (contextmachines/tests/) in a real browser, on a deployment's
+  address when given one (every Vercel preview), replayed with no AI. Only a test that was "not sure"
+  for want of an AI (a draft, or a saved element that has gone) runs again with one, and only when
+  anthropic-api-key is set. Writes JUnit XML and the job summary, posts one comment on the pull request
+  (edited on later runs), uploads each run's video and report, and sets a commit status a Vercel
+  Deployment Check or a required check can wait for. The job fails unless every test passed.
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  url:
+    description: >-
+      Where to run the tests (a preview deployment). Each saved test runs on this address's origin, its
+      own path kept. Empty: from Vercel's vercel.deployment.ready event when that started the run, or
+      else each test's own saved address.
+    required: false
+    default: ""
+  environment:
+    description: >-
+      Which deployment this is ("preview", "production"): names the commit status
+      ("contextmachines - preview") and keeps one comment per environment. Empty: from Vercel's event, or "ci".
+    required: false
+    default: ""
+  vercel-bypass-secret:
+    description: >-
+      Vercel's Protection Bypass for Automation secret, for protected deployments. It is added to the
+      address the way Vercel reads it, masked in the log, and redacted from the comment, the summary and
+      every file written.
+    required: false
+    default: ""
+  tests-dir:
+    description: The folder in the repository whose tests/ holds the saved tests.
+    required: false
+    default: contextmachines
+  grep:
+    description: Run only the saved tests whose file or goal has these words.
+    required: false
+    default: ""
+  ai:
+    description: >-
+      "auto" (default): replay with no AI, then run again with the AI only the tests that were not sure
+      for want of one, when anthropic-api-key is set. "never": no AI at all.
+    required: false
+    default: auto
+  anthropic-api-key:
+    description: Optional. Only the second pass sees it, and only for the tests that need it.
+    required: false
+    default: ""
+  ai-max-tokens:
+    description: >-
+      The most tokens each AI pass may take. Needed with anthropic-api-key: no one watches CI, so a
+      paid AI with no cap is not asked.
+    required: false
+    default: ""
+  minutes:
+    description: The most time for each test.
+    required: false
+    default: "3"
+  sha:
+    description: 'The commit to set the status on. Empty: Vercel''s event''s commit, the pull request''s head, or GITHUB_SHA.'
+    required: false
+    default: ""
+  pr:
+    description: 'The pull request to comment on. Empty: the event''s, or the open pull request of the commit.'
+    required: false
+    default: ""
+  comment:
+    description: Comment on the pull request ("false" for the job summary only).
+    required: false
+    default: "true"
+  status:
+    description: 'Set a commit status ("false" not to). Needs "statuses: write".'
+    required: false
+    default: "true"
+  status-name:
+    description: The commit status's name. Empty is "contextmachines - <environment>".
+    required: false
+    default: ""
+  fail-job:
+    description: Fail the job unless every test passed ("false" to only report; the status still says how it went).
+    required: false
+    default: "true"
+  key:
+    description: 'Tells several uses in one job apart (two apps): each keeps its own comment, work dir and artifact.'
+    required: false
+    default: ""
+  github-token:
+    description: >-
+      Used for the comment, the status and the pull request lookup, and nothing else: the CLI never sees
+      it. The job needs "pull-requests: write" and "statuses: write".
+    required: false
+    default: ${{ github.token }}
+  artifact:
+    description: Upload each run's video, report, healed tests and JUnit as a workflow artifact ("false" not to).
+    required: false
+    default: "true"
+  cli:
+    description: Path to a contextmachines CLI to run instead of the published package. For testing Context Machines itself.
+    required: false
+    default: ""
+
+outputs:
+  junit:
+    description: Path to the JUnit XML.
+    value: ${{ steps.run.outputs.junit }}
+  tests:
+    description: How many saved tests ran.
+    value: ${{ steps.run.outputs.tests }}
+  passed:
+    description: How many passed.
+    value: ${{ steps.run.outputs.passed }}
+  failed:
+    description: How many failed.
+    value: ${{ steps.run.outputs.failed }}
+  not-sure:
+    description: How many were not sure.
+    value: ${{ steps.run.outputs.not-sure }}
+  state:
+    description: The commit status it ended with (success, failure or error).
+    value: ${{ steps.run.outputs.state }}
+  pr:
+    description: The pull request it commented on, if any.
+    value: ${{ steps.run.outputs.pr }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        package-manager-cache: false
+    # The package version the Action runs (hashFiles can't read the Action's own folder: it is outside the workspace).
+    - id: version
+      shell: bash
+      run: echo "version=$(cat "$GITHUB_ACTION_PATH/version.txt")" >> "$GITHUB_OUTPUT"
+    # Chromium, kept between runs (Linux runners' path): the package version pins its Playwright.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      if: inputs.cli == ''
+      with:
+        path: ~/.cache/ms-playwright
+        key: contextmachines-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+    # The browser the package's own Playwright drives (`--package` puts that Playwright on the path, so
+    # the two can't drift apart). Run from the temp directory, so the repository's package.json can't
+    # change what npx fetches. --with-deps also installs the system libraries, which the cache doesn't hold.
+    - name: Install Context Machines and Chromium
+      if: inputs.cli == ''
+      shell: bash
+      working-directory: ${{ runner.temp }}
+      run: npx --yes --package="contextmachines@${{ steps.version.outputs.version }}" -- playwright install --with-deps chromium
+    - id: run
+      name: Run the saved tests
+      shell: bash
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        INPUT_VERCEL_BYPASS_SECRET: ${{ inputs.vercel-bypass-secret }}
+        INPUT_TESTS_DIR: ${{ inputs.tests-dir }}
+        INPUT_GREP: ${{ inputs.grep }}
+        INPUT_AI: ${{ inputs.ai }}
+        INPUT_ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        INPUT_AI_MAX_TOKENS: ${{ inputs.ai-max-tokens }}
+        INPUT_MINUTES: ${{ inputs.minutes }}
+        INPUT_SHA: ${{ inputs.sha }}
+        INPUT_PR: ${{ inputs.pr }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_STATUS: ${{ inputs.status }}
+        INPUT_STATUS_NAME: ${{ inputs.status-name }}
+        INPUT_FAIL_JOB: ${{ inputs.fail-job }}
+        INPUT_KEY: ${{ inputs.key }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_CLI: ${{ inputs.cli }}
+      run: node "$GITHUB_ACTION_PATH/run.ts"
+    # Also after a failed run: the videos and reports are what the comment's link points at.
+    - name: Keep the videos and reports
+      if: ${{ !cancelled() && inputs.artifact != 'false' && steps.run.outputs.work-dir != '' }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: contextmachines-test-${{ github.job }}${{ inputs.key && format('-{0}', inputs.key) || '' }}${{ inputs.environment && format('-{0}', inputs.environment) || '' }}
+        path: |
+          ${{ steps.run.outputs.work-dir }}/out
+          ${{ steps.run.outputs.work-dir }}/junit.xml
+          ${{ steps.run.outputs.work-dir }}/suite.json
+        if-no-files-found: warn
+        retention-days: 14
+        overwrite: true

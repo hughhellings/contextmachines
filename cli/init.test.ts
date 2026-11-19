@@ -281,9 +281,16 @@ describe("saying yes", () => {
     mkdirSync(join(dir, ".git"));
     write(".gitignore", "node_modules");
     await run(dir, ["--yes"]);
-    assert.equal(text(".gitignore"), "node_modules\ncontextmachines/.session.json\n");
+    assert.equal(text(".gitignore"), "node_modules\ncontextmachines/.session.json\ncontextmachines/.auth/\n");
     await run(dir, ["--yes", "--url", "http://localhost:9000"]);
-    assert.equal(text(".gitignore"), "node_modules\ncontextmachines/.session.json\n");
+    assert.equal(text(".gitignore"), "node_modules\ncontextmachines/.session.json\ncontextmachines/.auth/\n");
+    // "/.auth/" ignores only a folder at the top: contextmachines/.auth/ still needs its own line.
+    write(".gitignore", "contextmachines/.session.json\n/.auth/\n");
+    await run(dir, ["--yes", "--url", "http://localhost:9000"]);
+    assert.equal(text(".gitignore"), "contextmachines/.session.json\n/.auth/\ncontextmachines/.auth/\n");
+    write(".gitignore", "contextmachines/.session.json\n.auth/\n");
+    await run(dir, ["--yes", "--url", "http://localhost:9000"]);
+    assert.equal(text(".gitignore"), "contextmachines/.session.json\n.auth/\n");
     write(".gitignore", "contextmachines/\n");
     rmSync(join(dir, CONFIG_FILE));
     await run(dir, ["--yes"]);

@@ -1,0 +1,35 @@
+# Context Machines on every pull request and push to main, without Vercel: copy to
+# .github/workflows/contextmachines.yml. Point `url` at wherever this commit is running (a preview of
+# your own host, or a server started in an earlier step); left empty, each saved test runs on the
+# address it was saved on.
+name: contextmachines
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Start your app here if the tests run against it, for example:
+      # - run: npm ci && npm run build && (npm start &) && npx wait-on http://localhost:3000
+      - uses: hughhellings/contextmachines/action/ci@v0.2
+        with:
+          url: http://localhost:3000
+          environment: ci
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}

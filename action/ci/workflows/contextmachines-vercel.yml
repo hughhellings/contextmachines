@@ -1,0 +1,63 @@
+# Context Machines on every Vercel deployment: copy to .github/workflows/contextmachines-vercel.yml.
+#
+# Vercel sends `vercel.deployment.ready` once a deployment has built, before its Deployment Checks
+# run and before production domains point to it. The saved tests (contextmachines/tests/, committed)
+# replay on that deployment's address with no AI. The Action finds the pull request of the deployed
+# commit (the event names none), posts one comment there and edits it on each new deployment, and
+# sets the commit status "contextmachines - preview" or "contextmachines - production".
+#
+# Set up once:
+#   1. Vercel project, Settings > Git: turn on "repository_dispatch events".
+#   2. Settings > Deployment Protection: add a "Protection Bypass for Automation" secret, and add it
+#      in GitHub as the repository secret VERCEL_AUTOMATION_BYPASS_SECRET.
+#   3. Optional: ANTHROPIC_API_KEY as a secret. Only tests that are "not sure" for want of an AI use it.
+#   4. After the first run, Vercel Settings > Build and Deployment > Deployment Checks > Add Checks >
+#      GitHub: choose "contextmachines - production" (a failing run keeps the deployment off your domains).
+#
+# Vercel only sends the event to workflows on the default branch.
+name: contextmachines
+
+on:
+  repository_dispatch:
+    types: [vercel.deployment.ready]
+
+run-name: contextmachines - ${{ github.event.client_payload.environment }} - ${{ github.event.client_payload.git.shortSha }}
+
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The saved tests as they are at the deployed commit, not the default branch's.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.client_payload.git.sha }}
+          persist-credentials: false
+      - id: cm
+        uses: hughhellings/contextmachines/action/ci@v0.2
+        with:
+          # These three are also read from the event when left out; written here to be plain.
+          url: ${{ github.event.client_payload.url }}
+          environment: ${{ github.event.client_payload.environment }}
+          sha: ${{ github.event.client_payload.git.sha }}
+          vercel-bypass-secret: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+        env:
+          # Values a saved test types as {name}: CM_VAR_<NAME>, from secrets.
+          CM_VAR_EMAIL: ${{ secrets.CM_TEST_EMAIL }}
+          CM_VAR_PASSWORD: ${{ secrets.CM_TEST_PASSWORD }}
+      # If the job broke before the Action could say how it went (the browser install failed, say), the
+      # status must not stay "pending": a Deployment Check would wait on it until it timed out.
+      - name: Say the run broke
+        if: ${{ failure() && steps.cm.outputs.state == '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.client_payload.git.sha }}
+          CONTEXT: contextmachines - ${{ github.event.client_payload.environment }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=error -f context="$CONTEXT" -f description="The run broke before the tests finished" -f target_url="$RUN"

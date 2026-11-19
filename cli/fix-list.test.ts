@@ -60,7 +60,7 @@ function scriptedAi(asked: string[], items: { now: Items; fail: boolean }) {
       res.setHeader("content-type", "application/json");
       if (!system.includes("You review a web product")) return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ product: "A place to keep books.", mainAction: null, journeys: [] }) } }] }));
       if (items.fail) {
-        res.statusCode = 500;
+        res.statusCode = 422;
         return res.end(JSON.stringify({ error: { message: "the review broke" } }));
       }
       // What an OpenAI-style server says an answer took: its prompt tokens include the cached ones.
@@ -160,7 +160,9 @@ describe("the fix list, end to end", { skip: browser ? false : "no browser insta
     assert.match(text, /\d\. proven +[^]*src\/Reports\.tsx:4[^]*\d\. predicted +[^]*src\/Reports\.tsx:5/);
     // The out folder here is a long temporary path: the sentence names the file, and the path follows whole.
     // Then, with no person at a terminal (a pipe here), no menu: one plain line with the page, as a log reads (the list is just above).
-    assert.match(text.replace(/\s+/g, " "), /→ Hand (\S*FIX\.md to your coding agent|FIX\.md to your coding agent \S+\/FIX\.md) The page: \S+\/report\.html $/);
+    assert.match(text.replace(/\s+/g, " "), /→ Hand (\S*FIX\.md to your coding agent|FIX\.md to your coding agent \S+\/FIX\.md) (No starter tests written: [^]*? )?The page: \S+\/report\.html $/);
+    // learn ends saying why it wrote no starter tests: here, no journeys were walked.
+    assert.match(text.replace(/\s+/g, " "), /No starter tests written: Journeys weren't walked/);
     assert.doesNotMatch(text, /Enter done/);
     assert.match(text, /^ℹ learning \S+ · AI: [^\n]*saves stopped/m);
     // What the AI said it took, as e2e's AI row: the reading's server said nothing of it, the review's did.

@@ -1,0 +1,52 @@
+{
+  "goal": "pricing shows the plans",
+  "url": "http://localhost:50923/",
+  "verdict": "fail",
+  "steps": [
+    {
+      "n": 1,
+      "title": "pricing shows the plans",
+      "intent": "pricing shows the plans",
+      "check": {
+        "kind": "text_visible",
+        "text": "Pricing plans"
+      },
+      "verdict": "failed",
+      "reason": "the check didn't hold: the page shows \"Pricing plans\"",
+      "evidence": {
+        "expected": "the page shows \"Pricing plans\"",
+        "found": "the page shows \"Home Pricing\""
+      },
+      "actions": [
+        {
+          "label": "Clicking on 'Pricing' link",
+          "at": 0.82,
+          "cached": true
+        }
+      ],
+      "ms": 5852,
+      "at": 0.012,
+      "screenshot": "step-1.jpg",
+      "replayed": true
+    }
+  ],
+  "passed": 0,
+  "ms": 6275,
+  "startedAt": "2026-11-17T15:06:24.531Z",
+  "video": "run.webm",
+  "actions": 1,
+  "replay": true,
+  "friction": [],
+  "endUrl": "http://localhost:50923/pricing",
+  "urls": [
+    {
+      "t": 0.003,
+      "url": "http://localhost:50923/"
+    },
+    {
+      "t": 0.057,
+      "url": "http://localhost:50923/pricing"
+    }
+  ],
+  "ai": null
+}

@@ -6,7 +6,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { release } from "node:os";
-import { createInterface } from "node:readline";
+import { createInterface, emitKeypressEvents } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 
@@ -716,6 +716,105 @@ export function waitForKey(hint: string, { keys = ["a"], input = process.stdin a
       timer.unref();
     } catch {
       finish("done");
+    }
+  });
+}
+
+/** What a ticked list came back with: the numbers ticked (0-based, in order), or the person quitting. */
+export type Picked = { picked: number[] } | { quit: true };
+
+/** A key as the ticked list reads it, from Node's keypress parser. */
+export function pickKey(key: { name?: string; ctrl?: boolean; sequence?: string }): "up" | "down" | "toggle" | "all" | "run" | "quit" | undefined {
+  if (key.ctrl && (key.name === "c" || key.name === "d")) return "quit";
+  switch (key.name) {
+    case "up":
+    case "k":
+      return "up";
+    case "down":
+    case "j":
+    case "tab":
+      return "down";
+    case "space":
+      return "toggle";
+    case "a":
+      return "all";
+    case "return":
+    case "enter":
+      return "run";
+    case "q":
+    case "escape":
+      return "quit";
+    default:
+      return key.sequence === " " ? "toggle" : undefined;
+  }
+}
+
+/**
+ * A ticked list in the terminal: ↑ ↓ move, Space ticks, a ticks all (or none, when all are), Enter
+ * runs those ticked, q quits. Painted on `output` and erased when answered, the terminal's mode and
+ * cursor given back on every way out. Items are already safe to print (see safe()).
+ */
+export function pickList(items: readonly string[], { ticked = [], input = process.stdin as KeyInput & { isTTY?: boolean }, output = process.stderr as { write(text: string): unknown; columns?: number }, c = colors(false), title = "" }: { ticked?: readonly number[]; input?: KeyInput & { isTTY?: boolean }; output?: { write(text: string): unknown; columns?: number }; c?: Colors; title?: string } = {}): Promise<Picked> {
+  return new Promise((resolve) => {
+    const on = new Set(ticked.filter((i) => i >= 0 && i < items.length));
+    let at = 0;
+    let rows = 0;
+    let over = false;
+    const wasRaw = Boolean(input.isRaw);
+    const width = Math.max(20, Math.min(columnsOf(output), 100) - 1);
+    const paint = () => {
+      const lines = [
+        ...(title ? [title] : []),
+        ...items.map((item, i) => `${i === at ? c.cyan("›") : " "} ${on.has(i) ? c.green("◉") : c.dim("○")} ${c.dim(String(i + 1).padStart(2))}  ${item}`),
+        c.dim(`  Space ticks · a all · Enter runs ${on.size} · q quits`),
+      ].map((l) => cut(l, width));
+      output.write(`\x1b[?2026h${rows ? `\r\x1b[${rows - 1}A\x1b[J` : ""}${lines.join("\n")}\x1b[?2026l`);
+      rows = lines.length;
+    };
+    const finish = (how: Picked) => {
+      if (over) return;
+      over = true;
+      input.off("keypress" as "data", onKey as (chunk?: unknown) => void);
+      input.off("end", onQuit);
+      process.off("SIGINT", onQuit);
+      process.off("SIGTERM", onQuit);
+      try {
+        if (!wasRaw) input.setRawMode?.(false);
+      } finally {
+        input.pause();
+        output.write(`${rows ? `\r\x1b[${rows - 1}A\x1b[J` : ""}\x1b[?25h`);
+      }
+      resolve(how);
+    };
+    function onQuit() {
+      finish({ quit: true });
+    }
+    function onKey(_text: string | undefined, key: { name?: string; ctrl?: boolean; sequence?: string } = {}) {
+      const meaning = pickKey(key);
+      if (meaning === "quit") return finish({ quit: true });
+      if (meaning === "run") return finish({ picked: [...on].sort((a, b) => a - b) });
+      if (meaning === "up") at = (at + items.length - 1) % items.length;
+      else if (meaning === "down") at = (at + 1) % items.length;
+      else if (meaning === "toggle") on.has(at) ? on.delete(at) : on.add(at);
+      else if (meaning === "all") {
+        const all = on.size === items.length;
+        on.clear();
+        if (!all) items.forEach((_, i) => on.add(i));
+      } else return;
+      paint();
+    }
+    try {
+      emitKeypressEvents(input as unknown as NodeJS.ReadableStream);
+      input.on("keypress" as "data", onKey as (chunk?: unknown) => void);
+      input.on("end", onQuit);
+      process.on("SIGINT", onQuit);
+      process.on("SIGTERM", onQuit);
+      input.setRawMode?.(true);
+      input.resume();
+      output.write("\x1b[?25l");
+      paint();
+    } catch {
+      finish({ quit: true });
     }
   });
 }

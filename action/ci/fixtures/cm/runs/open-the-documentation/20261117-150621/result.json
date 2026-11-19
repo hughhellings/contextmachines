@@ -1,0 +1,37 @@
+{
+  "goal": "open the documentation",
+  "url": "http://localhost:50923/",
+  "verdict": "not_sure",
+  "steps": [
+    {
+      "n": 1,
+      "title": "open the documentation",
+      "intent": "open the documentation",
+      "check": {
+        "kind": "url_contains",
+        "text": "/docs"
+      },
+      "verdict": "not_sure",
+      "reason": "can't find Clicking on 'Documentation' link; no AI to find another way (--ai)",
+      "actions": [],
+      "ms": 3007,
+      "at": 0.011,
+      "screenshot": "step-1.jpg"
+    }
+  ],
+  "passed": 0,
+  "ms": 3314,
+  "startedAt": "2026-11-17T15:06:21.216Z",
+  "video": "run.webm",
+  "actions": 0,
+  "replay": true,
+  "friction": [],
+  "endUrl": "http://localhost:50923/",
+  "urls": [
+    {
+      "t": 0.004,
+      "url": "http://localhost:50923/"
+    }
+  ],
+  "ai": null
+}

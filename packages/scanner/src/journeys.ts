@@ -128,6 +128,8 @@ export interface WalkedJourney {
   fromCode?: true;
   /** It came out where an earlier journey had been, so it wasn't walked twice: that one's name. */
   joins?: string;
+  /** The screen a finished walk ended on (not one that joined another): what a starter test checks it reaches. */
+  ends?: string;
   seenWith: "stand-in";
 }
 
@@ -630,8 +632,9 @@ export async function walkOne(journey: Journey, drive: Drive, branch: (from: Jou
   const name = drive.plain(journey.name);
   const from = journey.start;
   const base = { name, from, main: journey.main === true, ...(journey.firstRun ? { firstRun: true as const } : {}), seenWith };
-  const done = (end: Partial<WalkedJourney> & { outcome: JourneyOutcome }): WalkedJourney => ({ ...base, ...end, steps });
   let now: ScreenNow;
+  // Only ever "finished" once a screen has been looked at: the walk's end is where it is now.
+  const done = (end: Partial<WalkedJourney> & { outcome: JourneyOutcome }): WalkedJourney => ({ ...base, ...end, ...(end.outcome === "finished" && !end.joins && now?.path ? { ends: now.path } : {}), steps });
   if (resume) now = resume.now;
   else {
     await drive.reset();

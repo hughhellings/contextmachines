@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="contextmachines test" tests="6" failures="1" errors="4" time="12.521">
+ <testsuite name="contextmachines" tests="6" failures="1" errors="4" skipped="0" time="12.521">
+  <testcase name="open-the-about-page" classname="localhost-50852" time="0.529">
+    <error type="couldnt_run" message="nothing is answering at localhost:50852: is the app running?"/>
+  </testcase>
+  <testcase name="open-the-documentation" classname="localhost-50852" time="0.522">
+    <error type="couldnt_run" message="nothing is answering at localhost:50852: is the app running?"/>
+  </testcase>
+  <testcase name="pricing-shows-plans" classname="localhost-50852" time="0.490">
+    <error type="couldnt_run" message="nothing is answering at localhost:50852: is the app running?"/>
+  </testcase>
+  <testcase name="open-the-about-page" classname="localhost-50923" time="1.387">
+    <system-out>open the about page · http://localhost:50923/
+✓ 1 open the about page (passed, replayed)
+    check: the address contains &quot;/about&quot;</system-out>
+  </testcase>
+  <testcase name="open-the-documentation" classname="localhost-50923" time="3.314">
+    <error type="not_sure" message="step 1 (open the documentation) not sure: can&apos;t find Clicking on &apos;Documentation&apos; link; no AI to find another way (--ai)"/>
+    <system-out>open the documentation · http://localhost:50923/
+? 1 open the documentation (not_sure)
+    check: the address contains &quot;/docs&quot;
+    can&apos;t find Clicking on &apos;Documentation&apos; link; no AI to find another way (--ai)</system-out>
+  </testcase>
+  <testcase name="pricing-shows-plans" classname="localhost-50923" time="6.275">
+    <failure type="fail" message="step 1 (pricing shows the plans) failed: the check didn&apos;t hold: the page shows &quot;Pricing plans&quot;"/>
+    <system-out>pricing shows the plans · http://localhost:50923/
+✗ 1 pricing shows the plans (failed, replayed)
+    check: the page shows &quot;Pricing plans&quot;
+    expected the page shows &quot;Pricing plans&quot;
+    found the page shows &quot;Home Pricing&quot;</system-out>
+  </testcase>
+ </testsuite>
+</testsuites>

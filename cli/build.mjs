@@ -106,7 +106,26 @@ async function main() {
     metafile: true,
     logLevel: "warning",
   });
-  writeFileSync(`${out}/${THIRD_PARTY}`, thirdPartyNotices(result.metafile.inputs));
+  // The SDK: tests in code (sdk/README.md). Its own bundles, so `import "contextmachines/sdk"` loads no CLI.
+  const inputs = { ...result.metafile.inputs };
+  for (const [entry, file] of [["./sdk/index.ts", "sdk.mjs"], ["./sdk/brain.ts", "sdk-brain.mjs"]]) {
+    const sdk = await build({
+      entryPoints: [here(entry)],
+      outfile: `${out}/${file}`,
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node22",
+      external: ["playwright", "playwright-core"],
+      define: { __CONTEXTMACHINES_VERSION__: JSON.stringify(values.version) },
+      banner: { js: 'import { createRequire as __contextmachinesRequire } from "node:module";\nconst require = __contextmachinesRequire(import.meta.url);' },
+      legalComments: "none",
+      metafile: true,
+      logLevel: "warning",
+    });
+    Object.assign(inputs, sdk.metafile.inputs);
+  }
+  writeFileSync(`${out}/${THIRD_PARTY}`, thirdPartyNotices(inputs));
   copyFileSync(here("./bin.mjs"), `${out}/bin.mjs`);
   chmodSync(`${out}/bin.mjs`, 0o755);
   copyFileSync(snippet, `${out}/snippet.min.js`);
@@ -128,11 +147,13 @@ async function main() {
     type: "module",
     // No "./": npm 11 drops a bin path that starts with one when it publishes (npm pack keeps it).
     bin: { contextmachines: "bin.mjs" },
+    // No ".": the package is a command; only the SDK is imported (contextmachines/sdk).
+    exports: { "./sdk": "./sdk.mjs", "./sdk/brain": "./sdk-brain.mjs", "./package.json": "./package.json" },
     repository: { type: "git", url: `git+https://github.com/${REPO}.git`, directory: DIRECTORY },
     homepage: `https://github.com/${REPO}#readme`,
     bugs: { url: `https://github.com/${REPO}/issues` },
     keywords: ["product", "context", "coding-agent", "agents-md", "claude-code", "codex", "playwright", "pull-request", "github-action", "broken-links", "smoke-test", "ux"],
-    files: ["bin.mjs", "contextmachines.mjs", "snippet.min.js", "skills", "examples", THIRD_PARTY, ...shipped],
+    files: ["bin.mjs", "contextmachines.mjs", "sdk.mjs", "sdk-brain.mjs", "snippet.min.js", "skills", "examples", THIRD_PARTY, ...shipped],
     // The release lines CI tests on: 22, 24 and 26.
     engines: { node: ">=22" },
     publishConfig: { access: "public" },

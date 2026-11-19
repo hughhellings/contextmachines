@@ -50,6 +50,10 @@ jobs:
             echo "::error::action/version.txt says $(cat action/version.txt), the tag says $version: the Action would run another version."
             exit 1
           fi
+          if [ -f action/ci/version.txt ] && [ "$(tr -d '[:space:]' < action/ci/version.txt)" != "$version" ]; then
+            echo "::error::action/ci/version.txt says $(cat action/ci/version.txt), the tag says $version: the action/ci Action would run another version."
+            exit 1
+          fi
           # The release notes: that section of the CHANGELOG, without its heading.
           awk -v v="$version" '$0 ~ "^## " v "( |$)" { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           echo "VERSION=$version" >> "$GITHUB_ENV"

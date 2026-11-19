@@ -18,6 +18,7 @@ import { emitKeypressEvents } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { agentEnv, AI_CHOICES, pickAi } from "./ai.ts";
+import { IDENTITY } from "../packages/scanner/src/tester/cache.ts";
 import { agentLaunch } from "./hand-off.ts";
 import { DEFAULT_URL, detectProject, listeners, notFoundWords, repoRootOf, servesPage, standInExpected, startDev, type Listener, type Project, type Started } from "./project.ts";
 import { publicUrl, startUrl } from "./report.ts";
@@ -29,6 +30,8 @@ export const CONFIG_FILE = "contextmachines.config.json";
 
 const IMPORT_LINE = "@contextmachines/PRODUCT.md";
 const SESSION_LINE = "contextmachines/.session.json";
+/** Where `test --setup` keeps a saved browser session per host: as live as a sign-in. */
+const AUTH_LINE = "contextmachines/.auth/";
 const WORKFLOW = ".github/workflows/contextmachines.yml";
 const SKILL_HOME = ".agents/skills/contextmachines";
 const SKILL_LINK = ".claude/skills/contextmachines";
@@ -65,6 +68,8 @@ export interface ProjectConfig {
   readCode?: boolean;
   /** The app's folder, when it isn't the one init ran in. */
   app?: string;
+  /** The app's name: its saved tests are filed under it and are at home on any of its addresses (a preview). */
+  identity?: string;
 }
 
 /**
@@ -81,8 +86,17 @@ export function readProjectConfig(dir: string = process.cwd()): ProjectConfig {
     throw new Error(`${CONFIG_FILE} isn't valid JSON`);
   }
   if (!saved || typeof saved !== "object" || Array.isArray(saved)) throw new Error(`${CONFIG_FILE} should be a JSON object`);
-  const { url, ai, model, readCode, app } = saved as Record<string, unknown>;
-  return { ...(typeof url === "string" ? { url } : {}), ...(typeof ai === "string" ? { ai } : {}), ...(typeof model === "string" && model.trim() ? { model: model.trim() } : {}), ...(typeof readCode === "boolean" ? { readCode } : {}), ...(typeof app === "string" ? { app } : {}) };
+  const { url, ai, model, readCode, app, identity } = saved as Record<string, unknown>;
+  return { ...(typeof url === "string" ? { url } : {}), ...(typeof ai === "string" ? { ai } : {}), ...(typeof model === "string" && model.trim() ? { model: model.trim() } : {}), ...(typeof readCode === "boolean" ? { readCode } : {}), ...(typeof app === "string" ? { app } : {}), ...(typeof identity === "string" && IDENTITY.test(identity.trim()) ? { identity: identity.trim() } : {}) };
+}
+
+/** The project's app name, or nothing: a broken config is reported where it's needed, not here. */
+export function projectIdentity(dir: string = process.cwd()): string | undefined {
+  try {
+    return readProjectConfig(dir).identity;
+  } catch {
+    return undefined;
+  }
 }
 
 /** A new address for the project: only that key changes, and a file that can't be read is left alone. */
@@ -539,6 +553,9 @@ const hasImport = (text: string) => text.includes("contextmachines/PRODUCT.md");
 
 /** A .gitignore line that already keeps the saved sign-in out of git. */
 const coversSession = (text: string) => text.split(/\r?\n/).some((line) => /^\/?(contextmachines\/?|contextmachines\/\.session\.json|contextmachines\/\*|\*?\.session\.json)$/.test(line.trim()));
+/** A .gitignore line that already keeps the saved test sessions (contextmachines/.auth/) out of git. */
+// A bare ".auth/" covers every folder of that name; "/.auth/" only the one at the top, which isn't ours.
+const coversAuth = (text: string) => text.split(/\r?\n/).some((line) => /^(\/?(contextmachines\/?|contextmachines\/\.auth\/?|contextmachines\/\*)|(\*\*\/)?\.auth\/?)$/.test(line.trim()));
 
 /**
  * The agent files that could still take the line: those here, once each. A link from one to the
@@ -651,8 +668,16 @@ function planChanges(cwd: string, answers: Answers): { changes: Change[]; warnin
   // learn keeps its own folder's .gitignore, but only once it has run; a saved sign-in is a live
   // session, so the project's own file holds the line too, wherever git is in use.
   const ignore = readText(at(".gitignore"));
-  if ((ignore !== undefined || taken(at(".git"))) && !coversSession(ignore ?? "")) {
-    changes.push({ verb: ignore === undefined ? "create" : "edit", path: ".gitignore", why: "keep your sign-in out of git", apply: () => appendLine(at(".gitignore"), SESSION_LINE, coversSession) });
+  if ((ignore !== undefined || taken(at(".git"))) && (!coversSession(ignore ?? "") || !coversAuth(ignore ?? ""))) {
+    changes.push({
+      verb: ignore === undefined ? "create" : "edit",
+      path: ".gitignore",
+      why: "keep your sign-in out of git",
+      apply: () => {
+        appendLine(at(".gitignore"), SESSION_LINE, coversSession);
+        appendLine(at(".gitignore"), AUTH_LINE, coversAuth);
+      },
+    });
   }
   return { changes, warnings };
 }

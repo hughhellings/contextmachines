@@ -8,6 +8,9 @@
  * version in version.txt (stamped at release), so the Action needs nothing else from this
  * repository; the `cli` input points it at a local copy instead (this repository's own CI does).
  *
+ * With `tests: true` it runs the repository's saved tests instead (contextmachines test --junit) and
+ * says pass or fail in the job summary: see runSavedTests.
+ *
  * Inputs come as environment variables: INPUT_<NAME> from the Action, or CONTEXTMACHINES_<NAME> to
  * run it the same way locally:
  *   CONTEXTMACHINES_URL=https://pr-12.preview.app CONTEXTMACHINES_BASE_URL=https://app.example.com node action/run.ts
@@ -16,7 +19,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -330,6 +333,56 @@ export function learnedBlocks(map: LearnedMap, foot: Footer, room: Room = IN_COM
   return blocks;
 }
 
+/** `contextmachines test --json` with no goal: the saved tests' results. Fields this Action doesn't know are ignored. */
+export interface SuiteResult {
+  ok: boolean;
+  exit: number;
+  summary?: { tests: number; passed: number; failed: number; notSure: number; blocked: number; couldNot: number };
+  tests?: { name: string; host: string; file?: string; verdict: string; passed?: number; steps?: number; healed?: number; draft?: boolean; error?: string; friction?: unknown[] }[];
+  /** Said when nothing ran: no saved tests, or one it refused. */
+  error?: string;
+}
+
+const VERDICT_WORDS: Record<string, string> = { pass: "✅ pass", fail: "❌ fail", blocked: "⛔ blocked", not_sure: "❔ not sure", couldnt_run: "⚠️ couldn't run" };
+
+/** The job summary for `tests: true`: a verdict headline, then one row per saved test. */
+export function testsBlocks(suite: SuiteResult, foot: Footer): Block[] {
+  const s = suite.summary;
+  if (!s || !suite.tests) return [{ text: `### ⚠️ Context Machines: the saved tests didn't run\n\n${cell(redact(suite.error ?? "no result"), 1000)}` }, { text: footer(foot) }];
+  const counts = [`${s.passed} passed`, `${s.failed} failed`, `${s.notSure} not sure`, ...(s.blocked ? [`${s.blocked} blocked`] : []), ...(s.couldNot ? [`${s.couldNot} couldn't run`] : [])];
+  const verdict = s.failed ? "🔴" : s.passed === s.tests ? "🟢" : "🟡";
+  const rows = suite.tests.map((t) => {
+    const notes = [
+      t.healed ? `${plural(t.healed, "step")} healed` : "",
+      t.draft ? "draft: run it once with an AI to record it" : "",
+      t.friction?.length ? `${plural(t.friction.length, "place")} a user might get stuck` : "",
+      t.error ? cell(redact(t.error), 300) : "",
+    ].filter(Boolean).join("; ");
+    const steps = t.steps !== undefined ? `${t.passed ?? 0}/${t.steps}` : "";
+    return `| ${code(t.name, 120)} | ${code(t.host, 80)} | ${VERDICT_WORDS[t.verdict] ?? cell(t.verdict, 40)} | ${steps} | ${notes} |`;
+  });
+  const healed = suite.tests.filter((t) => t.healed).length;
+  return [
+    { text: `### ${verdict} Context Machines: ${plural(s.tests, "saved test")} · ${counts.join(" · ")}${healed ? ` · ${healed} healed` : ""}` },
+    { text: `| Test | Site | Result | Steps | Notes |\n| --- | --- | --- | --- | --- |\n${rows.join("\n")}` },
+    // A heal lands in the runner's work dir, not the checkout: unless it is committed, it heals again next run.
+    ...(healed ? [{ text: `${plural(healed, "saved test")} healed: the updated ${healed === 1 ? "file is" : "files are"} in the workflow artifact (tests-run/tests/). Copy ${healed === 1 ? "it" : "them"} into contextmachines/tests/ and commit, or run \`npx contextmachines test\` locally and commit: until then ${healed === 1 ? "it heals" : "they heal"} again on every run.` }] : []),
+    { text: "Each run's video and report are in the workflow artifact; the results are also in JUnit XML (the `junit` output)." },
+    { text: footer(foot) },
+  ];
+}
+
+/** The test command's exit codes, in the words the Action's log shows. */
+export function testsFailure(status: number | null, suite: SuiteResult | undefined): string {
+  const s = suite?.summary;
+  if (status === 1 && s) return `Context Machines: ${plural(s.failed, "saved test")} failed. What was expected and what was there are in the job summary and each run's report.`;
+  if (status === 4 && s) return `Context Machines: not every saved test passed (${s.blocked} blocked, ${s.notSure} not sure). A step that needs healing with no AI is not sure: set anthropic-api-key, or run the test again locally and commit the saved test.`;
+  if (status === 3) return `Context Machines couldn't run ${s ? plural(s.couldNot, "saved test") : "the saved tests"} (exit 3): is the site up and public from the runner? What went wrong is printed above.`;
+  if (status === 2) return `Context Machines refused its inputs (exit 2): ${redact(suite?.error ?? "check url and tests-dir")}`;
+  if (status === 130) return "Context Machines was stopped while running the saved tests.";
+  return `Context Machines couldn't run the saved tests${status == null ? "" : ` (exit ${status})`}. What went wrong is printed above.`;
+}
+
 /**
  * The blocks as one body under `max` characters: when they don't fit, the folded parts go, last
  * first, and a note says so. The new issues, the headline and the footer always stay.
@@ -505,7 +558,8 @@ async function main(): Promise<void> {
   const baseUrl = input("base-url");
   const minutes = input("minutes") || "3";
   const key = input("key");
-  if (!url) stop("Context Machines: set `url` to the address of this pull request's preview (or the app as it is after the change).", 2);
+  const tests = input("tests") === "true";
+  if (!url && !tests) stop("Context Machines: set `url` to the address of this pull request's preview (or the app as it is after the change), or `tests: true` to run the saved tests.", 2);
   // The key names the artifact and the comment: keep it to characters both accept.
   if (!/^[A-Za-z0-9_.-]*$/.test(key)) stop(`Context Machines: \`key\` may hold letters, digits, ".", "-" and "_" (it was "${key}").`, 2);
 
@@ -525,6 +579,8 @@ async function main(): Promise<void> {
   // npx runs from the work dir, so the repository's own package.json can't change what it fetches.
   const run = (args: string[], capture: boolean) =>
     spawnSync(learner[0]!, [...learner.slice(1), ...args], { cwd: work, env, encoding: "utf8", stdio: capture ? ["ignore", "pipe", "inherit"] : "inherit", maxBuffer: 64 * 1024 * 1024 });
+
+  if (tests) return runSavedTests({ work, run, url, version, started, minutes });
 
   const learn = (target: string, side: "before" | "after") => {
     const out = join(work, side);
@@ -593,6 +649,59 @@ async function main(): Promise<void> {
   }
 
   if (issues && input("fail-on-new-issues") === "true") stop(`Context Machines found ${plural(issues, before ? "new issue" : "issue")} (fail-on-new-issues is on).`);
+}
+
+/**
+ * `tests: true`: every saved test in the repository (contextmachines/tests/, or tests-dir), replayed
+ * with `contextmachines test --junit`. A pure replay needs no AI; a step whose saved element has gone
+ * is healed only with anthropic-api-key, and is "not sure" without it. The tests are copied into the
+ * work dir first, so the runs, their videos and any healed test land there (and in the artifact),
+ * never in the checkout. The result goes to the job summary; the job fails unless every test passed.
+ */
+/** The first published version with the `test` command. */
+export const TESTS_SINCE = "0.2.0";
+
+/** Why the package at `version` can't run the saved tests, or nothing when it can ("from source" always can). */
+export function testsVersionProblem(version: string): string | undefined {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (!m) return undefined;
+  const want = TESTS_SINCE.split(".").map(Number);
+  const have = m.slice(1, 4).map(Number);
+  const older = have[0]! !== want[0]! ? have[0]! < want[0]! : have[1]! !== want[1]! ? have[1]! < want[1]! : have[2]! < want[2]!;
+  return older ? `Context Machines ${version} (this Action's version.txt) has no \`test\` command, so \`tests: true\` can't run: it needs ${TESTS_SINCE} or later. Use a newer release of the Action.` : undefined;
+}
+
+function runSavedTests(o: { work: string; run: (args: string[], capture: boolean) => ReturnType<typeof spawnSync>; url: string; version: string; started: number; minutes: string }): void {
+  const tooOld = testsVersionProblem(o.version);
+  if (tooOld) stop(tooOld, 2);
+  const from = resolve(process.env.GITHUB_WORKSPACE || process.cwd(), input("tests-dir") || "contextmachines");
+  const saved = join(from, "tests");
+  if (!existsSync(saved)) stop(`Context Machines: there are no saved tests in ${redact(saved)}. Run \`npx contextmachines test "<goal>" --url <address>\` locally (a test that passes is saved there) and commit contextmachines/tests/, or set tests-dir.`, 2);
+  const out = join(o.work, "tests-run");
+  rmSync(out, { recursive: true, force: true });
+  cpSync(saved, join(out, "tests"), { recursive: true });
+  const junit = join(o.work, "junit.xml");
+  const ai = process.env.ANTHROPIC_API_KEY ? ["--ai", "anthropic"] : ["--ai", "none"];
+  const args = ["test", "--out", out, "--junit", junit, "--json", "--minutes", o.minutes, ...ai, ...(o.url ? ["--url", o.url] : []), ...(input("grep") ? ["--grep", input("grep")] : [])];
+  console.log(`::group::Running the saved tests${o.url ? ` on ${redact(o.url)}` : ""}`);
+  const result = quietly(() => o.run(args, true));
+  console.log("::endgroup::");
+  if (result.error) stop(`Context Machines couldn't start (${redact(result.error.message)}).`);
+  let suite: SuiteResult | undefined;
+  try {
+    suite = JSON.parse(String(result.stdout)) as SuiteResult;
+  } catch {
+    suite = undefined;
+  }
+  const foot: Footer = { version: o.version, seconds: (Date.now() - o.started) / 1000, url: o.url || "each test's own address", photos: undefined };
+  const runId = process.env.GITHUB_RUN_ID;
+  if (input("artifact") !== "false" && runId && process.env.GITHUB_REPOSITORY) foot.photos = `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${runId}#artifacts`;
+  const text = (suite ? testsBlocks(suite, foot) : testsBlocks({ ok: false, exit: result.status ?? 1, error: "the test command printed no result" }, foot)).map((b) => b.text).join("\n\n");
+  quietly(() => console.log(`\n${text}\n`));
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
+  const s = suite?.summary;
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `junit=${existsSync(junit) ? junit : ""}\npassed=${s?.passed ?? 0}\nfailed=${s?.failed ?? 0}\ntests=${s?.tests ?? 0}\n`);
+  if (result.status !== 0) stop(testsFailure(result.status, suite), result.status ?? 1);
 }
 
 function pullRequestNumber(): number | undefined {

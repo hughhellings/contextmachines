@@ -3,14 +3,14 @@
 //   node --test action/run.test.ts
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { redact as cliRedact } from "../cli/report.ts";
-import { cell, code, diffBlocks, fit, hasChanged, issueLine, learnedBlocks, learnerEnv, learnFailure, marker, redact, upsertComment, type Comparison, type Finding } from "./run.ts";
+import { cell, code, diffBlocks, fit, hasChanged, issueLine, learnedBlocks, learnerEnv, learnFailure, marker, redact, testsBlocks, testsFailure, testsVersionProblem, upsertComment, type Comparison, type Finding, type SuiteResult } from "./run.ts";
 
 const none: Comparison = { screensAdded: [], screensGone: [], actionsAdded: [], actionsGone: [], actionsRenamed: [], actionsMoved: [], mainAction: null, journeysChanged: [], issuesNew: [], issuesFixed: [] };
 const foot = { version: "0.1.0", seconds: 134, url: "https://pr-12.preview.example/", photos: "https://github.com/o/r/actions/runs/1#artifacts" };
@@ -411,5 +411,139 @@ if (cmd === "learn") {
     const r = await action({ INPUT_URL: "https://after.example", INPUT_KEY: "a b" });
     assert.equal(r.status, 2);
     assert.match(r.stdout, /`key` may hold letters/);
+  });
+});
+
+// tests: true, with a stand-in for `contextmachines test` that reads the saved tests it was handed.
+describe("the saved tests (tests: true)", () => {
+  const suite = (over: Partial<SuiteResult> = {}): SuiteResult => ({
+    ok: false, exit: 1,
+    summary: { tests: 3, passed: 1, failed: 1, notSure: 1, blocked: 0, couldNot: 0 },
+    tests: [
+      { name: "create-invoice", host: "localhost-3000", verdict: "pass", passed: 3, steps: 3, healed: 1 },
+      { name: "ping @everyone", host: "localhost-3000", verdict: "fail", passed: 1, steps: 2 },
+      { name: "new-client", host: "localhost-3000", verdict: "not_sure", passed: 0, steps: 2, draft: true, friction: [{}, {}] },
+    ],
+    ...over,
+  });
+  const foot = { version: "0.2.0", seconds: 12, url: "https://pr-1.example/?token=SECRET9" };
+  it("leads with pass and fail counts, one row per test, escaped and redacted", () => {
+    const text = testsBlocks(suite(), foot).map((b) => b.text).join("\n\n");
+    assert.match(text, /^### 🔴 Context Machines: 3 saved tests · 1 passed · 1 failed · 1 not sure · 1 healed\n/);
+    // A heal lands in the runner, not the checkout: it says to commit it.
+    assert.match(text, /1 saved test healed: the updated file is in the workflow artifact \(tests-run\/tests\/\)\. .*commit/);
+    assert.match(text, /\| `create-invoice` \| `localhost-3000` \| ✅ pass \| 3\/3 \| 1 step healed \|/);
+    assert.match(text, /\| `ping @everyone` \| `localhost-3000` \| ❌ fail \| 1\/2 \|/);
+    assert.match(text, /❔ not sure \| 0\/2 \| draft: run it once with an AI to record it; 2 places a user might get stuck \|/);
+    assert.ok(!text.includes("SECRET9"));
+  });
+  it("is green only when every test passed, and says why nothing ran", () => {
+    assert.match(testsBlocks(suite({ ok: true, exit: 0, summary: { tests: 1, passed: 1, failed: 0, notSure: 0, blocked: 0, couldNot: 0 }, tests: [{ name: "a", host: "h", verdict: "pass", passed: 1, steps: 1 }] }), foot)[0]!.text, /^### 🟢 /);
+    assert.match(testsBlocks(suite({ summary: { tests: 1, passed: 0, failed: 0, notSure: 1, blocked: 0, couldNot: 0 } }), foot)[0]!.text, /^### 🟡 /);
+    assert.match(testsBlocks({ ok: false, exit: 2, error: "There are no saved tests" }, foot)[0]!.text, /didn't run\n\nThere are no saved tests/);
+  });
+  it("refuses a package too old to have the test command, before running anything", () => {
+    assert.match(testsVersionProblem("0.1.5")!, /0\.1\.5 .*has no `test` command.*needs 0\.2\.0 or later/);
+    assert.equal(testsVersionProblem("0.2.0"), undefined);
+    assert.equal(testsVersionProblem("1.0.0"), undefined);
+    assert.equal(testsVersionProblem("from source"), undefined);
+    // The Action as shipped: the version it pins must have the command, while it offers tests: true.
+    const pinned = readFileSync(join(import.meta.dirname, "version.txt"), "utf8").trim();
+    if (/\btests:/.test(readFileSync(join(import.meta.dirname, "action.yml"), "utf8"))) assert.equal(testsVersionProblem(pinned), undefined, `version.txt pins ${pinned}, which can't run tests: true`);
+  });
+  it("words each exit code", () => {
+    assert.match(testsFailure(1, suite()), /1 saved test failed/);
+    assert.match(testsFailure(4, suite()), /not sure.*anthropic-api-key/);
+    assert.match(testsFailure(3, undefined), /couldn't run the saved tests \(exit 3\)/);
+  });
+
+  const dir = mkdtempSync(join(tmpdir(), "cm-action-tests-"));
+  const cli = join(dir, "cli.mjs");
+  // Each saved test passes, unless its name says "broken"; what it was asked is kept beside the results.
+  writeFileSync(cli, `
+import { mkdirSync, readdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { join } from "node:path";
+const args = process.argv.slice(2);
+const opt = (name) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
+if (args[0] !== "test") process.exit(9);
+const out = opt("--out");
+const names = [];
+for (const host of readdirSync(join(out, "tests"))) for (const f of readdirSync(join(out, "tests", host))) names.push([host, f.replace(/\\.json$/, "")]);
+writeFileSync(join(out, "asked.json"), JSON.stringify({ args, sawToken: Boolean(process.env.GITHUB_TOKEN || process.env.INPUT_GITHUB_TOKEN), cmVar: process.env.CM_VAR_PASSWORD ?? null }));
+// A healed test is written back where the CLI was pointed: never the checkout.
+appendFileSync(join(out, "tests", names[0][0], names[0][1] + ".json"), "\\n");
+console.error("::warning::from the site");
+const tests = names.map(([host, name]) => ({ name, host, verdict: name.includes("broken") ? "fail" : "pass", passed: 1, steps: 1 }));
+const failed = tests.filter((t) => t.verdict === "fail").length;
+writeFileSync(opt("--junit"), "<testsuites/>");
+console.log(JSON.stringify({ ok: !failed, exit: failed ? 1 : 0, summary: { tests: tests.length, passed: tests.length - failed, failed, notSure: 0, blocked: 0, couldNot: 0 }, tests }));
+process.exit(failed ? 1 : 0);
+`);
+  const repo = (tests: string[]) => {
+    const root = mkdtempSync(join(dir, "repo-"));
+    for (const t of tests) {
+      mkdirSync(join(root, "contextmachines", "tests", "localhost-3000"), { recursive: true });
+      writeFileSync(join(root, "contextmachines", "tests", "localhost-3000", `${t}.json`), "{}");
+    }
+    return root;
+  };
+  const action = async (env: Record<string, string>) => {
+    const output = join(dir, `out-${Math.random()}`);
+    const summary = join(dir, `summary-${Math.random()}`);
+    writeFileSync(output, "");
+    writeFileSync(summary, "");
+    const child = spawn(process.execPath, [fileURLToPath(new URL("./run.ts", import.meta.url))], {
+      env: { PATH: process.env.PATH, INPUT_CLI: cli, INPUT_WORK_DIR: join(dir, `work-${Math.random()}`), INPUT_TESTS: "true", INPUT_GITHUB_TOKEN: "secret-token", GITHUB_TOKEN: "secret-token", GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary, ...env },
+    });
+    let stdout = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stdout += d));
+    const status = await new Promise<number | null>((done) => child.on("close", done));
+    return { status, stdout, outputs: readFileSync(output, "utf8"), summary: readFileSync(summary, "utf8") };
+  };
+
+  it("replays every saved test with no AI and no url, and says pass in the job summary", async () => {
+    const root = repo(["create-invoice", "open-the-docs"]);
+    const r = await action({ GITHUB_WORKSPACE: root, CM_VAR_PASSWORD: "pw-from-secret" });
+    assert.equal(r.status, 0, r.stdout);
+    assert.match(r.summary, /^### 🟢 Context Machines: 2 saved tests · 2 passed · 0 failed · 0 not sure/);
+    assert.match(r.outputs, /^passed=2$/m);
+    assert.match(r.outputs, /^failed=0$/m);
+    const work = r.outputs.match(/^work-dir=(.*)$/m)![1]!;
+    assert.match(r.outputs, new RegExp(`^junit=${join(work, "junit.xml").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
+    const asked = JSON.parse(readFileSync(join(work, "tests-run", "asked.json"), "utf8"));
+    assert.deepEqual(asked.args.slice(0, 6), ["test", "--out", join(work, "tests-run"), "--junit", join(work, "junit.xml"), "--json"]);
+    assert.ok(asked.args.join(" ").includes("--ai none"), "no key: no AI");
+    assert.ok(!asked.args.includes("--url"));
+    assert.equal(asked.sawToken, false, "the GitHub token is kept from the CLI");
+    assert.equal(asked.cmVar, "pw-from-secret", "CM_VAR_ values reach the tests");
+    // The checkout's tests are as they were: the run wrote to its copy.
+    assert.equal(readFileSync(join(root, "contextmachines", "tests", "localhost-3000", "create-invoice.json"), "utf8"), "{}");
+    // What the site printed can't act as a workflow command.
+    assert.match(r.stdout, /::stop-commands::([0-9a-f-]{36})\n[^]*::warning::from the site\n[^]*::\1::/);
+  });
+  it("fails the job when a test fails, after the summary, and runs on the url's origin when given", async () => {
+    const root = repo(["broken-checkout", "create-invoice"]);
+    const r = await action({ GITHUB_WORKSPACE: root, INPUT_URL: "https://pr-9.preview.example", INPUT_ANTHROPIC_API_KEY: "", ANTHROPIC_API_KEY: "sk-ant-test-key-123456789" });
+    assert.equal(r.status, 1);
+    assert.match(r.summary, /^### 🔴 Context Machines: 2 saved tests · 1 passed · 1 failed/);
+    assert.match(r.summary, /\| `broken-checkout` \| `localhost-3000` \| ❌ fail \|/);
+    assert.match(r.stdout, /::error::Context Machines: 1 saved test failed/);
+    const work = r.outputs.match(/^work-dir=(.*)$/m)![1]!;
+    const asked = JSON.parse(readFileSync(join(work, "tests-run", "asked.json"), "utf8"));
+    assert.ok(asked.args.join(" ").includes("--url https://pr-9.preview.example"));
+    assert.ok(asked.args.join(" ").includes("--ai anthropic"), "a key: the AI heals");
+  });
+  it("says where the saved tests should be when there are none", async () => {
+    const root = mkdtempSync(join(dir, "empty-"));
+    const r = await action({ GITHUB_WORKSPACE: root });
+    assert.equal(r.status, 2);
+    assert.match(r.stdout, /::error::Context Machines: there are no saved tests in .*contextmachines\/tests\. Run `npx contextmachines test/);
+  });
+  it("still refuses a missing url when learning", async () => {
+    const r = await action({ INPUT_TESTS: "false", GITHUB_WORKSPACE: dir });
+    assert.equal(r.status, 2);
+    assert.match(r.stdout, /set `url`.*or `tests: true`/);
+    assert.ok(existsSync(dir) && readdirSync(dir).length > 0);
   });
 });

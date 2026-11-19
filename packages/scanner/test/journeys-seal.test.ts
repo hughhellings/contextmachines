@@ -2,6 +2,7 @@ import { availableParallelism } from "node:os";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { backgroundHost, scanSite, type JourneyHints, type JourneyReport, type JourneysUnderWay, type ScanResult, type WalkedJourney } from "../src/scan.ts";
 import { Seal, STAND_IN_USER_ID, type Asked } from "../src/stand-in.ts";
+import { startersFrom } from "../src/tester/starters.ts";
 import { journeysApp } from "./journeys-app.ts";
 import { standInApp, type StandInApp } from "./stand-in-app.ts";
 
@@ -285,6 +286,24 @@ describe("a real browser walking the journeys", () => {
     expect(named("Next up", "/mail-start")).toMatchObject({ outcome: "stopped_here", stop: { kind: "email", byLabel: false } });
     expect(named("Open folder")).toMatchObject({ outcome: "stopped_here", stop: { kind: "file", byLabel: false } });
     expect(named("Carry on")).toMatchObject({ outcome: "stopped_here", stop: { kind: "payment" } });
+  });
+
+  it("says where a finished walk ended, and learn's starter tests come only from those", () => {
+    const add = named("Add trade");
+    expect(add.ends).toMatch(/^\//);
+    for (const journey of report.journeys) if (journey.outcome !== "finished" || journey.joins) expect(journey.ends).toBeUndefined();
+    const starters = startersFrom(report.journeys, app.url);
+    const finished = new Set(report.journeys.filter((j) => j.outcome === "finished").map((j) => j.name));
+    expect(starters.map((t) => t.goal)).toContain("First run");
+    // Add trade saves from /trades/new to /trades: "/trades" holds before anything is done, so a
+    // starter of it would pass by doing nothing. It gets none.
+    expect(starters.map((t) => t.goal)).not.toContain("Add trade");
+    for (const test of starters) {
+      expect(finished.has(test.goal)).toBe(true);
+      expect(test.draft).toBe(true);
+      expect(new URL(test.url).origin).toBe(new URL(app.url).origin);
+      expect(test.steps.at(-1)!.check.kind).toBe("url_contains");
+    }
   });
 
   it("never reads a journey past a stop as finished", () => {

@@ -18,6 +18,17 @@ It proves the dead button with no AI: pressing it changed nothing and sent nothi
 
 ![The dashboard, as the run photographed it](contextmachines/screens/dashboard.jpg)
 
+## Trying `test`
+
+A goal that passes on this app, from its new-invoice form. "Reg. no." isn't in the goal, so the tester types a plainly made-up value (`TEST-001`) and says so. Whatever it types that isn't in the goal (or a `--var`) is marked "made-up", even a value the AI put into its plan:
+
+```bash
+node examples/invoice/server.mjs &
+npx contextmachines test "create an invoice for Acme Ltd for 120 and check it opens as a draft" --url localhost:3000/invoices/new
+```
+
+The pass is saved in `contextmachines/tests/localhost-3000/`, and the next run replays it with no AI. A goal that checks the new invoice shows the client's name fails, and rightly: the invoice page doesn't show it.
+
 ## Trying `diff`
 
 `--changed` serves the same app after a change: "Send invoice" becomes "Email invoice", there's a new "Duplicate invoice" button, and "Export CSV" moves from Reports to its own Exports screen.
@@ -30,4 +41,4 @@ npx contextmachines learn http://localhost:3001 --out after
 npx contextmachines diff before/map.json after/map.json
 ```
 
-Last checked with contextmachines 0.1.0 and Node 25.
+Last checked with contextmachines 0.2.0 and Node 25.

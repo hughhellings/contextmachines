@@ -283,7 +283,8 @@ export function featureSignature(features: readonly Feature[], site?: SiteModelS
  */
 export interface AskJson {
   model: string;
-  ask(system: string, question: string, schema: object): Promise<{ text: string; costUsd?: number }>;
+  /** `more.images`: pictures of a screen (JPEG, in memory), for an AI that takes them (`sees`); others leave it out. */
+  ask(system: string, question: string, schema: object, more?: { images?: readonly { mime: "image/jpeg"; data: Buffer }[] }): Promise<{ text: string; costUsd?: number }>;
 }
 
 /**

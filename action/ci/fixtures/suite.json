@@ -1,0 +1,83 @@
+{
+  "ok": false,
+  "exit": 1,
+  "summary": {
+    "tests": 6,
+    "passed": 1,
+    "failed": 1,
+    "notSure": 1,
+    "blocked": 0,
+    "couldNot": 3,
+    "healed": 0,
+    "weak": 0
+  },
+  "ms": 12521,
+  "ai": null,
+  "tests": [
+    {
+      "name": "open-the-about-page",
+      "file": "cm/tests/localhost-50852/open-the-about-page.json",
+      "host": "localhost-50852",
+      "ms": 529,
+      "verdict": "couldnt_run",
+      "error": "nothing is answering at localhost:50852: is the app running?"
+    },
+    {
+      "name": "open-the-documentation",
+      "file": "cm/tests/localhost-50852/open-the-documentation.json",
+      "host": "localhost-50852",
+      "ms": 522,
+      "verdict": "couldnt_run",
+      "error": "nothing is answering at localhost:50852: is the app running?"
+    },
+    {
+      "name": "pricing-shows-plans",
+      "file": "cm/tests/localhost-50852/pricing-shows-plans.json",
+      "host": "localhost-50852",
+      "ms": 490,
+      "verdict": "couldnt_run",
+      "error": "nothing is answering at localhost:50852: is the app running?"
+    },
+    {
+      "name": "open-the-about-page",
+      "file": "cm/tests/localhost-50923/open-the-about-page.json",
+      "host": "localhost-50923",
+      "ms": 1387,
+      "verdict": "pass",
+      "url": "http://localhost:50923/",
+      "passed": 1,
+      "steps": 1,
+      "healed": 0,
+      "friction": [],
+      "report": "cm/runs/open-the-about-page/20261117-150619/report.html"
+    },
+    {
+      "name": "open-the-documentation",
+      "file": "cm/tests/localhost-50923/open-the-documentation.json",
+      "host": "localhost-50923",
+      "ms": 3314,
+      "verdict": "not_sure",
+      "url": "http://localhost:50923/",
+      "passed": 0,
+      "steps": 1,
+      "healed": 0,
+      "friction": [],
+      "report": "cm/runs/open-the-documentation/20261117-150621/report.html"
+    },
+    {
+      "name": "pricing-shows-plans",
+      "file": "cm/tests/localhost-50923/pricing-shows-plans.json",
+      "host": "localhost-50923",
+      "ms": 6275,
+      "verdict": "fail",
+      "url": "http://localhost:50923/",
+      "passed": 0,
+      "steps": 1,
+      "healed": 0,
+      "friction": [],
+      "report": "cm/runs/pricing-shows-the-plans/20261117-150624/report.html"
+    }
+  ],
+  "junit": "junit.xml"
+}
+

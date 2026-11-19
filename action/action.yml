@@ -2,10 +2,11 @@ name: Context Machines product diff
 description: >-
   Learns your app at the addresses you give it (the pull request's preview deploy, and the app before
   the change) and comments what the change does to the product: new provable issues, and screens and
-  actions added, gone, renamed or moved. It runs the published contextmachines package against those
-  URLs; it doesn't build or run the pull request's code. The job needs "pull-requests: write" to
-  comment (on a pull request from a fork the token is read-only, so the result goes to the job
-  summary only).
+  actions added, gone, renamed or moved. With "tests: true" it runs your saved tests instead
+  (contextmachines/tests/) and says pass or fail in the job summary, with JUnit XML. It runs the
+  published contextmachines package against those URLs; it doesn't build or run the pull request's
+  code. The job needs "pull-requests: write" to comment (on a pull request from a fork the token is
+  read-only, so the result goes to the job summary only).
 branding:
   icon: map
   color: blue
@@ -15,18 +16,37 @@ inputs:
     description: >-
       The app after this change (usually the pull request's preview deploy). A user name and password
       or a bypass token in it is used to get in, and left out of the comment, the job summary and the
-      Action's own log lines; keep it in a secret so GitHub masks it in the step's header too.
-    required: true
+      Action's own log lines; keep it in a secret so GitHub masks it in the step's header too. Needed to
+      learn; with "tests: true" it's optional, and each saved test runs on this address's origin
+      instead of its own (its path kept).
+    required: false
+    default: ""
+  tests:
+    description: >-
+      "true" runs the saved tests (contextmachines test --junit) instead of learning: every test under
+      tests-dir is replayed in a real browser, with no AI needed. A step whose saved element has gone is
+      healed only with anthropic-api-key; without it that step is "not sure". The job fails unless every
+      test passed. Values a test types as {name} come from CM_VAR_<NAME> in the step's env (from secrets).
+    required: false
+    default: "false"
+  tests-dir:
+    description: With "tests: true", the folder in the repository whose tests/ holds the saved tests.
+    required: false
+    default: contextmachines
+  grep:
+    description: With "tests: true", run only the saved tests whose name or goal has these words.
+    required: false
+    default: ""
   base-url:
     description: The app before this change (production, or the main branch's preview). Without it, the comment describes the product as it stands.
     required: false
     default: ""
   anthropic-api-key:
-    description: Optional. With it, actions are named in plain English and the product is described; an unchanged product reuses its last reading.
+    description: Optional. With it, actions are named in plain English and the product is described; an unchanged product reuses its last reading. With "tests: true", it heals a saved test whose element has gone.
     required: false
     default: ""
   minutes:
-    description: How long to explore each version, 1 to 30.
+    description: How long to explore each version, 1 to 30 (with "tests: true", the most time for each test).
     required: false
     default: "3"
   fail-on-new-issues:
@@ -77,6 +97,15 @@ outputs:
   map:
     description: Path to the map.json of the app after the change.
     value: ${{ steps.run.outputs.map }}
+  junit:
+    description: With "tests: true", the path to the JUnit XML of the saved tests' results.
+    value: ${{ steps.run.outputs.junit }}
+  passed:
+    description: With "tests: true", how many saved tests passed.
+    value: ${{ steps.run.outputs.passed }}
+  failed:
+    description: With "tests: true", how many saved tests failed.
+    value: ${{ steps.run.outputs.failed }}
 
 runs:
   using: composite
@@ -101,10 +130,13 @@ runs:
         key: contextmachines-reading-${{ github.job }}-${{ inputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: contextmachines-reading-${{ github.job }}-${{ inputs.key }}-
     - id: run
-      name: Learn and compare
+      name: Learn and compare, or run the saved tests
       shell: bash
       env:
         INPUT_URL: ${{ inputs.url }}
+        INPUT_TESTS: ${{ inputs.tests }}
+        INPUT_TESTS_DIR: ${{ inputs.tests-dir }}
+        INPUT_GREP: ${{ inputs.grep }}
         INPUT_BASE_URL: ${{ inputs.base-url }}
         INPUT_MINUTES: ${{ inputs.minutes }}
         INPUT_FAIL_ON_NEW_ISSUES: ${{ inputs.fail-on-new-issues }}

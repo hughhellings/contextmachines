@@ -668,7 +668,8 @@ describe("the saved sign-in", () => {
   });
   it("is what --login writes", () => {
     const source = readFileSync(new URL("./contextmachines.ts", import.meta.url), "utf8");
-    assert.match(source, /writePrivate\(session, JSON\.stringify\(await context\.storageState\(\)\)\)/);
+    // The session it writes leaves out a sign-in provider's cookies (Google, Microsoft, Apple, GitHub: C13).
+    assert.match(source, /writePrivate\(session, JSON\.stringify\(withoutProviders\(await context\.storageState\(\)\)\)\)/);
     assert.doesNotMatch(source, /chmodSync/);
   });
 });
@@ -1018,9 +1019,9 @@ describe("reaching the AI", () => {
     const real = globalThis.fetch;
     try {
       globalThis.fetch = (async () => { throw refused(); }) as typeof fetch;
-      assert.equal(await asking(pickAi("ollama", undefined)), "couldn't reach Ollama on this machine at http://localhost:11434/v1: ECONNREFUSED; is it running? (ollama serve)");
+      assert.equal(await asking(pickAi("ollama", undefined)), "couldn't reach Ollama on this machine at http://localhost:11434: ECONNREFUSED; is it running? (ollama serve)");
       globalThis.fetch = (async () => { throw new TypeError("", { cause: new AggregateError([], "") }); }) as typeof fetch;
-      assert.equal(await asking(pickAi("ollama", undefined)), "couldn't reach Ollama on this machine at http://localhost:11434/v1; is it running? (ollama serve)");
+      assert.equal(await asking(pickAi("ollama", undefined)), "couldn't reach Ollama on this machine at http://localhost:11434; is it running? (ollama serve)");
     } finally {
       globalThis.fetch = real;
     }

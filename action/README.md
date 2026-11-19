@@ -1,6 +1,6 @@
 # Context Machines GitHub Action
 
-Learns your app before and after a pull request and keeps one comment on the pull request up to date: the new issues the change brings, each one seen happening, and what it does to the product (screens and actions added, gone, renamed or moved, a different main action, a journey broken).
+Two jobs in one Action: it runs your saved tests ([`tests: true`](#run-your-saved-tests)), or it learns your app before and after a pull request and keeps one comment on the pull request up to date: the new issues the change brings, each one seen happening, and what it does to the product (screens and actions added, gone, renamed or moved, a different main action, a journey broken).
 
 It learns the apps at the addresses you give it, such as the pull request's preview deploy and production. It never builds or runs the pull request's code. Saves are answered on the runner and anything it can't show is a read is held back. A GET that writes behind an innocent name can't be told from a read, so with a saved sign-in use a test account ([what it can't prove](https://github.com/hughhellings/contextmachines#what-it-cant-prove)).
 
@@ -15,7 +15,7 @@ jobs:
   contextmachines:
     runs-on: ubuntu-latest
     steps:
-      - uses: hughhellings/contextmachines/action@v0.1
+      - uses: hughhellings/contextmachines/action@v0.2
         with:
           url: https://pr-${{ github.event.number }}.preview.yourapp.com   # the app after this change
           base-url: https://yourapp.com                                     # the app before it
@@ -23,6 +23,46 @@ jobs:
 ```
 
 The preview has to be up when the job runs. If another workflow deploys it, run this one after that workflow, with its preview address as `url`.
+
+## Run your saved tests
+
+With `tests: true` it runs the tests you saved with `npx contextmachines test` instead of learning: every file under `contextmachines/tests/` in your repository is replayed in a real browser, and the job summary says pass or fail, one row per test. A replay needs no AI key. The job fails unless every test passed.
+
+```yaml
+# .github/workflows/tests.yml
+name: Tests
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  contextmachines:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4                                           # the saved tests are in the repository
+      - uses: hughhellings/contextmachines/action@v0.2
+        with:
+          tests: true
+          url: https://pr-${{ github.event.number }}.preview.yourapp.com   # optional: run every test here instead of its own address
+        env:
+          CM_VAR_PASSWORD: ${{ secrets.TEST_ACCOUNT_PASSWORD }}             # only if a test types {password}
+```
+
+```markdown
+### 🟢 Context Machines: 2 saved tests · 2 passed · 0 failed · 0 not sure
+
+| Test | Site | Result | Steps | Notes |
+| --- | --- | --- | --- | --- |
+| `search-for-alan-turing-and-check-his` | `en.wikipedia.org` | ✅ pass | 2/2 |  |
+| `create-an-invoice-for-acme-ltd-for-120` | `localhost-3000` | ✅ pass | 1/1 |  |
+```
+
+- It runs `contextmachines test --junit` on a copy of the tests in the work dir, so the runs, videos and reports go in the artifact and nothing is written to your checkout. The JUnit file is the `junit` output, for a test-report action.
+- With `url`, each test runs on that address's origin, keeping its own path: a preview deploy. The tests must all be one site's (pick them with `grep`), and on another origin nothing is healed. Without it, each test runs where it was saved.
+- A step whose saved element has gone (a button renamed) is healed by the AI with `anthropic-api-key`, and flagged in the summary and the JUnit file; the healed file is in the artifact (`tests-run/tests/`), not your checkout, so it heals again on every run until you commit it. Without a key that step is "not sure" and says why, and the job fails. Heal it locally (`npx contextmachines test <name>`) and commit the updated test.
+- A starter test `learn` wrote (`"draft": true`) has never been run: run it once locally with an AI, and commit the test that passing saves.
+- Values a test types as `{name}` come from `CM_VAR_<NAME>` in the step's `env`, from your secrets. A test that types one keeps no video or photos, so what was typed never reaches the artifact; they're masked in every text it writes. A saved session (`--setup`) is git-ignored and never reaches CI.
+- `tests: true` needs Context Machines 0.2.0 or later (the version the Action pins): an older pin refuses before running anything.
+- `grep` runs only the tests whose name or goal has those words, and `tests-dir` is the folder that holds `tests/` (default `contextmachines`).
 
 ## The comment
 
@@ -51,10 +91,13 @@ Everything in the comment that came from the site, or from an AI that read it, i
 
 | Input | Default | What it does |
 | --- | --- | --- |
-| `url` | (required) | The app after this change, usually the pull request's preview deploy. |
+| `url` | (required to learn) | The app after this change, usually the pull request's preview deploy. With `tests: true`, optional: every saved test runs on its origin. |
+| `tests` | `false` | `true` runs the saved tests (see [Run your saved tests](#run-your-saved-tests)) instead of learning. |
+| `tests-dir` | `contextmachines` | With `tests: true`, the folder in the repository that holds `tests/`. |
+| `grep` | | With `tests: true`, only the tests whose name or goal has these words. |
 | `base-url` | | The app before this change (production, or the main branch's preview). Without it, the comment describes the product as it stands. |
-| `anthropic-api-key` | | With it, actions are named in plain English and the product is described. An unchanged product reuses its last reading, so repeat runs cost nothing. |
-| `minutes` | `3` | How long to explore each version, 1 to 30. |
+| `anthropic-api-key` | | With it, actions are named in plain English and the product is described. An unchanged product reuses its last reading, so repeat runs cost nothing. With `tests: true`, it heals a test whose saved element has gone. |
+| `minutes` | `3` | How long to explore each version, 1 to 30 (with `tests: true`, the most time for each test). |
 | `fail-on-new-issues` | `false` | `true` fails the job when the change brings new issues (without `base-url`, any issue). The comment is written first. |
 | `comment` | `true` | `false` writes the result to the job summary only. |
 | `key` | | Gives each use of the Action in one job its own comment, work dir and artifact, for two apps or the legs of a matrix. Letters, digits, `.`, `-` and `_`. |
@@ -70,10 +113,12 @@ Everything in the comment that came from the site, or from an AI that read it, i
 | `changed` | `true` when the change alters the product's screens, actions, journeys or issues and `false` when it doesn't. Empty without `base-url`, because there is nothing to compare with. |
 | `issues` | The number of new issues the change brings. Without `base-url`, every issue found. |
 | `map` | Path to the `map.json` of the app after the change. |
+| `junit` | With `tests: true`: path to the JUnit XML of the results. |
+| `passed`, `failed` | With `tests: true`: how many saved tests passed, and failed. |
 
 ```yaml
       - id: product
-        uses: hughhellings/contextmachines/action@v0.1
+        uses: hughhellings/contextmachines/action@v0.2
         with:
           url: ${{ needs.preview.outputs.url }}
           base-url: https://yourapp.com
@@ -91,6 +136,7 @@ Everything in the comment that came from the site, or from an AI that read it, i
 | 1 | `fail-on-new-issues` is on and the change brings new issues. |
 | 2 | An input was refused: no `url`, a bad `minutes` or `key`. |
 | 3 | A site couldn't be reached or read. Is the preview up, and public to the runner? |
+| 1 or 4 | With `tests: true`: a saved test failed (1), or one was blocked or not sure (4). The job summary says which. |
 
 Commenting never fails the job. When GitHub refuses the comment, a warning says why, and the result is in the job summary:
 
@@ -109,7 +155,7 @@ Commenting never fails the job. When GitHub refuses the comment, a warning says 
 
 ## Which version you get
 
-While Context Machines is 0.x, a minor release may change the comment, the inputs and `map.json`, so the Action's tag follows the minor: `@v0.1` moves to each 0.1.x patch release (0.1.1, 0.1.2…) and never to 0.2.0, which starts its own `@v0.2`. Moving up a minor is your choice, after reading [CHANGELOG.md](../CHANGELOG.md). From 1.0.0 on, `@v1` will follow 1.x. To never move at all, pin a release (`@v0.1.0`) or its commit SHA.
+While Context Machines is 0.x, a minor release may change the comment, the inputs and `map.json`, so the Action's tag follows the minor: `@v0.2` moves to each 0.2.x patch release (0.2.1, 0.2.2…) and never to 0.3.0, which starts its own `@v0.3`. `tests: true` needs `@v0.2` or later; `@v0.1` stays on 0.1.x. Moving up a minor is your choice, after reading [CHANGELOG.md](../CHANGELOG.md). From 1.0.0 on, `@v1` will follow 1.x. To never move at all, pin a release (`@v0.2.0`) or its commit SHA.
 
 ## Runners
 

@@ -4602,7 +4602,7 @@ const STUCK_MS = 8000;
 /** How far past its time limit a run may go, for a step already under way, before its page is closed. */
 const WATCHDOG_MARGIN_MS = 15_000;
 /** Marks a worker's script in its address, for the route, which takes it off again (see noLooseSockets). */
-const WORKER_MARK = "ctx-stub";
+export const WORKER_MARK = "ctx-stub";
 
 /** A link not followed, or a read not sent (read), and what stopped it. */
 export interface HeldBack {
@@ -4964,14 +4964,14 @@ function readableQuery(query: string | undefined): boolean {
 }
 
 /** Whether a POST is GraphQL and every operation in it, named or not, batched or not, is a readable query. */
-function onlyGraphqlReads(body: string | undefined, contentType: string | undefined): boolean {
+export function onlyGraphqlReads(body: string | undefined, contentType: string | undefined): boolean {
   if (/graphql/i.test(contentType ?? "") && !/json/i.test(contentType ?? "")) return readableQuery(body);
   const operations = graphqlOperations(body);
   return operations.length > 0 && operations.every((op) => readableQuery(op.query));
 }
 
 /** Whether a GET is a GraphQL request that isn't a readable query. A search for "query=shoes" isn't GraphQL at all. */
-function graphqlGetActs(url: URL): boolean {
+export function graphqlGetActs(url: URL): boolean {
   const query = url.searchParams.get("query");
   if (query?.includes("{") && operationKinds(query).some((kind) => kind !== "query")) return true;
   const asks = query !== null || url.searchParams.has("operationName") || url.searchParams.has("extensions");
@@ -5066,7 +5066,7 @@ export function socketUpkeep(text: string): boolean {
  * it from the route (the mark in its address says so, see startWithoutSockets), which keeps the
  * worker's own address for its relative imports; a blob's or a data address's is read and rewritten here.
  */
-function noLooseSockets() {
+export function noLooseSockets() {
   const scope = globalThis as unknown as Record<string, unknown>;
   for (const name of ["SharedWorker", "WebTransport", "WebSocketStream", "RTCPeerConnection", "webkitRTCPeerConnection"]) {
     try {
@@ -5154,7 +5154,7 @@ function withoutMark(url: URL): URL {
 }
 
 /** A worker's script, fetched and given what must run ahead of it (see noLooseSockets). Unfetched, there's no worker. */
-async function startWithoutSockets(route: Route, url: URL): Promise<void> {
+export async function startWithoutSockets(route: Route, url: URL): Promise<void> {
   try {
     const module = url.searchParams.get(WORKER_MARK) === "module";
     const response = await route.fetch({ url: withoutMark(url).href });

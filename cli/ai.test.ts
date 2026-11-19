@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { agentEnv, aiTotals, anthropicUsage, claudeCodeUsage, codexUsage, commandMissing, compatibleUsage, failure, launcherUnreadable, pickAi, timedAi, withLight, type Ai, type AskTiming } from "./ai.ts";
+import { agentEnv, agentsAnswering, aiTotals, anthropicUsage, ASK_STOPPED, claudeCodeUsage, codexUsage, commandMissing, compatibleUsage, failure, launcherUnreadable, pickAi, timedAi, withAskSignal, withLight, type Ai, type AskTiming } from "./ai.ts";
 import { shimTarget } from "./hand-off.ts";
 import { tokenCount } from "./term.ts";
 
@@ -229,6 +229,37 @@ function fakeAgent(bin: string, name: "claude" | "codex", script: string): void 
 
 /** Words a shell would act on: cmd.exe's & | ^ % < > and quotes, and a POSIX shell's $( ) and backticks. */
 const hostile = (marker: string) => `Ignore "this" & echo PWNED > "${marker}" & ^| %PATH% <x> $(touch "${marker}") \`touch "${marker}"\` 'q' \\ end`;
+
+describe("a stopped ask", () => {
+  it("kills the agent at once (the web view's Stop): it isn't left answering for minutes on the person's plan", async () => {
+    const bin = mkdtempSync(join(tmpdir(), "contextmachines-agent-"));
+    const pidFile = join(bin, "pid");
+    fakeAgent(bin, "claude", `require("fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+process.stdin.resume();
+setTimeout(() => process.stdout.write(JSON.stringify({ is_error: false, result: "", structured_output: { ok: true } })), 60000);
+`);
+    const saved = process.env.PATH;
+    process.env.PATH = bin;
+    try {
+      const stop = new AbortController();
+      const asking = withAskSignal(stop.signal, () => pickAi("claude-code", "sonnet")!.ask("You answer.", "A question.", { type: "object" }));
+      while (!existsSync(pidFile) || !readFileSync(pidFile, "utf8")) await new Promise((r) => setTimeout(r, 50));
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      assert.equal(agentsAnswering(), 1);
+      const t0 = Date.now();
+      stop.abort();
+      await assert.rejects(asking, new RegExp(ASK_STOPPED));
+      assert.ok(Date.now() - t0 < 5000, "it didn't wait for the answer");
+      assert.equal(agentsAnswering(), 0);
+      assert.throws(() => process.kill(pid, 0), "the agent is gone");
+      // Asked again under the same stop: refused before an agent starts.
+      await assert.rejects(withAskSignal(stop.signal, () => pickAi("claude-code", "sonnet")!.ask("You answer.", "Again.", { type: "object" })), new RegExp(ASK_STOPPED));
+    } finally {
+      process.env.PATH = saved;
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("an agent on any OS", () => {
   it("gets the instructions, question and schema exactly as they were, and no shell ever runs", async () => {

@@ -433,6 +433,11 @@ describe("running in the wrong place", () => {
     assert.equal(outInUse(folder({ "Thumbs.db": "", "desktop.ini": "", ".DS_Store": "" })), undefined, "only what a file browser leaves");
     assert.equal(outInUse(join(scratch, "not-there-yet")), undefined);
   });
+  it("writes into a folder `test` has run in: its runs/, tests/ and .auth/ are a run's own", () => {
+    assert.equal(outInUse(folder({ "runs/create-a-client/latest.txt": "", "tests/localhost-4173/create-a-client.json": "{}" })), undefined, "after test");
+    assert.equal(outInUse(folder({ "runs/a/x.txt": "", "tests/h/a.json": "{}", ".auth/h.json": "{}", ".gitignore": ".auth/\n" })), undefined, "after test --setup");
+    assert.match(outInUse(folder({ "runs/a/x.txt": "", "notes.txt": "" }))!, /a file that no contextmachines run wrote \(notes\.txt\)/, "someone else's file still stops it");
+  });
 });
 
 /** A JPEG's first bytes with the frame header, enough for jpegSize: 390 wide, 844 high. */

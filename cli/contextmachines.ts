@@ -28,7 +28,11 @@ import { chosenStorageKey, detectProject, detectUrl, hasAppCode, listeners, notF
 import { readRepo } from "./repo.ts";
 import { understand, type Understood } from "./understand.ts";
 import { AI_CHOICES, aiTotals, launcherUnreadable, pickAi, timedAi, type Ai, type AskTiming } from "./ai.ts";
+import { guardSpend, readCap, unattended } from "./providers/spend.ts";
 import { browserCommand, browserInstalled, INIT_ABOUT, INIT_EXIT_MEANINGS, INIT_OPTIONS, installBrowser, readProjectConfig, runInit, saveAddress } from "./init.ts";
+import { noStartersWhy, startersFrom, writeStarters } from "../packages/scanner/src/tester/starters.ts";
+import { MCP_ABOUT, MCP_EXAMPLES, MCP_EXIT_MEANINGS, MCP_OPTIONS, MCP_SAFETY, MCP_TOOLS_HELP, MCP_USAGE } from "./mcp.ts";
+import { runTestCommand, TEST_ABOUT, TEST_EXAMPLES, TEST_EXIT_MEANINGS, TEST_OPTIONS, TEST_SAFETY, TEST_USAGE, UI_ABOUT, UI_EXIT_MEANINGS, UI_OPTIONS } from "./test-command.ts";
 import {
   badgeWords, behindSignIn, compare, deadStart, diff, filesToClear, FIX_FILE, fixDoc, fixLines, fixPhoto, goneSince, newSince, groupFindings, groupTargets, groupText, HOME, issueText, journeyHeadline, journeyLive, journeyMap, journeyTree, journeysNotWalked, keptNoMainAction, leftForAnotherSite, liveAddress, liveIssues, MANIFEST, MAP_SCHEMA, mayKeepDataHere, moreFixLines, fixRest, forPasting, nextLines, outInUse, jpegSize, type PhotoBoxes, photoName, plural,
   productDoc, productFile, PRODUCT_NEW, provenCount, publicUrl, redact, referredPhotos, reportPage, resultLines, rowLines, screenName, signUpIn, startUrl, stoppedFrom, summaryRows, usageWords, wallNext, whyNoJourneys, whyNothing, withLiveAddresses, writePrivate, type Fix, type Prediction, type ProductMap,
@@ -134,6 +138,8 @@ const LEARN_FLAGS: Record<string, Flag> = {
   "no-journeys": { type: "boolean", group: "Behind a sign-in", help: "don't walk the journeys (sign-up, onboarding, the main action) in the sealed browser" },
   ai: { type: "string", value: "<which>", group: "AI", help: `the AI that reads what the product is for: ${AI_CHOICES.join(", ")} (default: the first you have)` },
   model: { type: "string", value: "<id>", group: "AI", help: "the model to ask (default: each AI's own)" },
+  "max-tokens": { type: "string", value: "<n>", group: "AI", help: "most tokens the AI may take in this run; needed with an API key in CI or a schedule (or CONTEXTMACHINES_MAX_TOKENS)" },
+  "max-usd": { type: "string", value: "<n>", group: "AI", help: "most dollars the AI may cost in this run, where the provider says a price (OpenRouter); or CONTEXTMACHINES_MAX_USD" },
   "reading-cache": { type: "string", value: "<file>", group: "AI", help: "where the AI reading is kept, so an unchanged product isn't read again (default <out>/.reading.json)" },
   out: { type: "string", value: "<dir>", group: "Output", help: "where to write (default ./contextmachines)" },
   json: { type: "boolean", group: "Output", help: "print the result as JSON on stdout, for coding agents and builds; progress goes to stderr" },
@@ -152,6 +158,9 @@ const COMMON_FLAGS: Record<string, Flag> = {
   version: { type: "boolean", short: "v", group: "Other", help: "show the version" },
 };
 const COMMANDS = {
+  test: { usage: TEST_USAGE, summary: "test any web app with one sentence: a browser does the steps, each passes only when its check is measured; PASS or FAIL, a video and a report", flags: {}, examples: TEST_EXAMPLES },
+  ui: { usage: "ui [--url <address>] [--no-open]", summary: "the tester as a local app: put in a site, describe a test as steps you can edit, watch each run beside the live browser, then its video, the runs history and the issues found", flags: {}, examples: ["npx contextmachines ui", "npx contextmachines ui --url https://en.wikipedia.org --no-open"] },
+  mcp: { usage: MCP_USAGE, summary: "the tester as an MCP server for your coding agent: run a test from one sentence and read the verdict, signed out, one at a time", flags: {}, examples: MCP_EXAMPLES },
   init: { usage: "init [--yes] [--url <address>]", summary: "set this folder up: finds your app and where it runs, which AI reads it, and the map for your coding agent", flags: {}, examples: ["npx contextmachines init", "npx contextmachines init --yes --url http://localhost:3000"] },
   learn: {
     usage: "learn <url> [options]",
@@ -188,15 +197,50 @@ function help(command?: Command): string {
   };
   const flagRow = (name: string, f: Flag): [string, string] => [`${f.short ? `-${f.short}, ` : ""}--${name}${f.value ? ` ${f.value}` : ""}`, f.help];
   const paragraph = (text: string) => lines.push(...wrapTo(text, cols - 4).map((l) => `  ${l}`));
-  if (command === "init") {
-    // init asks its own questions, but its help is laid out as every command's.
-    lines.push(...wrapTo(INIT_ABOUT, cols - 2));
+  if (command === "ui") {
+    // ui is test's web view: test reads its options.
+    lines.push(...wrapTo(UI_ABOUT, cols - 2));
     section("Usage");
-    lines.push(`  npx contextmachines ${COMMANDS.init.usage}`);
+    lines.push(`  npx contextmachines ${COMMANDS.ui.usage}`, "  npx contextmachines test --ui [options]");
     section("Options");
-    table(INIT_OPTIONS, c.cyan);
+    table(UI_OPTIONS, c.cyan);
+    section("Safety");
+    paragraph(TEST_SAFETY);
+    lines.push("");
+    paragraph("The server listens on 127.0.0.1 only, on a free port. Its address holds a random token for the session: every request needs it and the server's own address as its Host, and starting or stopping a run is a POST with the token in a header. Anyone with the address can run tests from this machine until you stop it, so don't share it.");
     section("Examples");
-    for (const e of COMMANDS.init.examples) lines.push(`  ${c.dim("$")} ${e}`);
+    for (const e of COMMANDS.ui.examples) lines.push(`  ${c.dim("$")} ${e}`);
+  } else if (command === "mcp") {
+    // mcp reads its own options; its help is laid out as every command's.
+    lines.push(...wrapTo(MCP_ABOUT, cols - 2));
+    section("Usage");
+    lines.push(`  npx contextmachines ${COMMANDS.mcp.usage}`);
+    section("Options");
+    table(MCP_OPTIONS, c.cyan);
+    section("Tools");
+    table(MCP_TOOLS_HELP, c.cyan);
+    section("Safety");
+    paragraph(TEST_SAFETY);
+    lines.push("");
+    paragraph(MCP_SAFETY);
+    section("Examples");
+    for (const e of COMMANDS.mcp.examples) lines.push(`  ${c.dim("$")} ${e}`);
+  } else if (command === "init" || command === "test") {
+    // init and test read their own words, but their help is laid out as every command's.
+    lines.push(...wrapTo(command === "init" ? INIT_ABOUT : TEST_ABOUT, cols - 2));
+    section("Usage");
+    lines.push(`  npx contextmachines ${COMMANDS[command].usage}`);
+    if (command === "test") lines.push("  npx contextmachines test <saved-test-name> [options]", "  npx contextmachines test [--grep <text>] [--junit <file>]   every saved test", "  npx contextmachines test --setup \"<sign-in>\" --url <address> --var name=value");
+    section("Options");
+    table(command === "init" ? INIT_OPTIONS : TEST_OPTIONS, c.cyan);
+    if (command === "test") {
+      section("Safety");
+      paragraph(TEST_SAFETY);
+      section("What it can't do yet");
+      paragraph("Web only (no mobile apps). A run never waits for a person: it signs in with --as <account> (a stored password, an authenticator code, a mail catcher such as Mailpit, or a provider test code on a host marked as yours) or --var values. A code sent to your own inbox or phone, a magic link, a new-device check or a CAPTCHA ends BLOCKED with its code: sign in yourself once with npx contextmachines accounts setup <account> --url <site> (or Set up sign-in under Accounts in the app), and later runs reuse that session. It never solves a CAPTCHA and never signs in to Google by itself.");
+    }
+    section("Examples");
+    for (const e of COMMANDS[command].examples) lines.push(`  ${c.dim("$")} ${e}`);
   } else if (command) {
     const spec = COMMANDS[command];
     lines.push(...wrapTo(spec.summary.replace(/^./, (x) => x.toUpperCase()), cols - 2));
@@ -211,6 +255,7 @@ function help(command?: Command): string {
         ["report.html", "the page to read: one card per item with its screenshot (the problem boxed where it was measured), where to change it, its evidence and a button that copies it for your coding agent; then every screen. Nothing on it loads from the web."],
         ["map.json", "the same, as data"],
         ["screens/", "a photo of each screen"],
+        ["tests/<host>/", "a starter test for each journey walked to its end (\"draft\": true), never over a file that's there: run them with npx contextmachines test, and the first pass, done by your AI, saves each for replay"],
       ]);
       section("At the end, in a terminal");
       table([
@@ -239,18 +284,21 @@ function help(command?: Command): string {
     section("Examples");
     for (const e of spec.examples) lines.push(`  ${c.dim("$")} ${e}`);
   } else {
-    lines.push("Learns your web product from the outside and writes down what it understood.");
+    lines.push("Tests any web app with one sentence, and learns your own app from the outside to hand your coding agent a fix list.");
     section("Usage");
     for (const spec of Object.values(COMMANDS)) lines.push(`  npx contextmachines ${spec.usage}`);
     lines.push("  npx contextmachines help <command>");
     section("Commands");
     table(Object.entries(COMMANDS).map(([name, spec]) => [name, spec.summary]), c.cyan);
     section("Examples");
-    for (const e of [COMMANDS.learn.examples[0], COMMANDS.learn.examples[1], COMMANDS.diff.examples[0]]) lines.push(`  ${c.dim("$")} ${e}`);
-    lines.push("", `  Add ${c.cyan("--help")} to a command for its options: ${c.cyan("npx contextmachines learn --help")}`);
+    for (const e of [COMMANDS.test.examples[0], COMMANDS.learn.examples[0], COMMANDS.learn.examples[1], COMMANDS.diff.examples[0]]) lines.push(`  ${c.dim("$")} ${e}`);
+    lines.push("", `  Add ${c.cyan("--help")} to a command for its options and exit codes: ${c.cyan("npx contextmachines test --help")}`);
   }
-  section("Exit codes");
-  table((command === "diff" ? DIFF_EXIT_MEANINGS : command === "init" ? INIT_EXIT_MEANINGS : EXIT_MEANINGS).map(([code, meaning]) => [String(code), meaning]));
+  // Each command ends in its own ways: listed under its own help, not one command's table for all.
+  if (command) {
+    section("Exit codes");
+    table((command === "diff" ? DIFF_EXIT_MEANINGS : command === "init" ? INIT_EXIT_MEANINGS : command === "test" ? TEST_EXIT_MEANINGS : command === "ui" ? UI_EXIT_MEANINGS : command === "mcp" ? MCP_EXIT_MEANINGS : EXIT_MEANINGS).map(([code, meaning]) => [String(code), meaning]));
+  }
   section("Environment");
   // diff compares two files and asks no AI: its help shouldn't suggest it wants a key.
   const aiSettings: [string, string][] = command === "diff" ? [] : [
@@ -282,6 +330,32 @@ if (process.argv[2] === "init" || (process.argv[2] === "help" && process.argv[3]
       });
     });
   await exitWhenWritten(await runInit(process.argv[2] === "help" ? ["--help"] : process.argv.slice(3), { learn, help: () => help("init") }));
+}
+
+// ui is test's web view: the same options, read by test.
+if (process.argv[2] === "ui" && process.argv[3] !== "--help" && process.argv[3] !== "-h") {
+  await exitWhenWritten(await runTestCommand(["--ui", ...process.argv.slice(3)], { help: () => help("ui") }));
+}
+
+// mcp: the tester as an MCP server on stdio. Before anything else can write to stdout, which carries only JSON-RPC.
+if (process.argv[2] === "mcp" && process.argv[3] !== "--help" && process.argv[3] !== "-h") {
+  const { runMcpCommand } = await import("./mcp.ts");
+  await exitWhenWritten(await runMcpCommand(process.argv.slice(3), { help: () => help("mcp"), version: VERSION }));
+}
+
+// accounts: the project's test accounts, and their secrets, never printed.
+// `accounts setup <label>`: "Set up sign-in" in the terminal, the same as test --setup --by-hand --as <label>.
+if (process.argv[2] === "accounts" && process.argv[3] === "setup" && process.argv[4] && !process.argv[4].startsWith("-")) {
+  await exitWhenWritten(await runTestCommand(["--setup", "--by-hand", "--as", process.argv[4], ...process.argv.slice(5)], { help: () => help("test") }));
+}
+if (process.argv[2] === "accounts") {
+  const { runAccountsCommand } = await import("./accounts-command.ts");
+  await exitWhenWritten(await runAccountsCommand(process.argv.slice(3)));
+}
+
+// test reads its own words too: a goal in quotes, then its options.
+if (process.argv[2] === "test" || (process.argv[2] === "help" && process.argv[3] === "test")) {
+  await exitWhenWritten(await runTestCommand(process.argv[2] === "help" ? ["--help"] : process.argv.slice(3), { help: () => help("test") }));
 }
 
 const { values, positionals } = (() => {
@@ -404,6 +478,9 @@ if (flag("login") && !process.stdin.isTTY) fail("--login needs a terminal, to si
 let ai: Ai | undefined;
 try {
   ai = pickAi(aiChoice, modelChoice);
+  const kept = guardSpend(ai, readCap({ maxTokens: str("max-tokens"), maxUsd: str("max-usd") }), { unattended: unattended() });
+  if ("refuse" in kept) throw new Error(kept.refuse);
+  ai = kept.ai;
 } catch (error) {
   fail(firstLine(error), EXIT.usage);
 }
@@ -500,7 +577,9 @@ if (flag("login")) {
     const reply = await confirmEnter();
     if (reply) {
       session = join(out, ".session.json");
-      writePrivate(session, JSON.stringify(await context.storageState()));
+      // A sign-in provider's cookies (Google, Microsoft, Apple, GitHub) are never kept (C13): only the app's.
+      const { withoutProviders } = await import("./signin.ts");
+      writePrivate(session, JSON.stringify(withoutProviders(await context.storageState())));
     } else cancelled = true;
   } catch (error) {
     fail(`Signing in didn't work: ${redact(firstLine(error))}`, EXIT.couldNot);
@@ -1337,6 +1416,17 @@ for (const file of filesToClear(earlier, written)) rmSync(join(out, file), { for
 writeFileSync(join(out, MANIFEST), `${JSON.stringify({ schemaVersion: "files-1", about: "The files contextmachines wrote in this folder: the only ones it will ever remove.", files: written, ...(product.hash ? { productHash: product.hash } : {}) }, null, 2)}\n`);
 run.stop(interrupted ? "stopped" : "done");
 screen = undefined;
+// Your first tests: a draft for each journey walked to its end, under tests/<host>/, never over a file that's there.
+let starters: string[] = [];
+let startersFailed = false;
+try {
+  starters = writeStarters(join(out, "tests"), startersFrom(journeyWalk.journeys, start.href));
+} catch (error) {
+  startersFailed = true;
+  process.stderr.write(`${errColors.yellow("!")} Couldn't write the starter tests: ${safe(firstLine(error))}\n`);
+}
+// One line either way: how many were written, or why none was.
+const startersLine = starters.length ? `Wrote ${plural(starters.length, "starter test")} · run them: npx contextmachines test` : startersFailed || interrupted ? "" : safe(noStartersWhy(journeyWalk, start.href), 400);
 
 const readingWarning = readingFailed ? `The AI reading didn't work (${safe(redact(readingFailed))}), so the product, main action and journeys are missing; screens, actions and issues were written.` : "";
 const reviewWarning = review.why === "failed" || review.why === "too-slow" ? `The AI's review of the screens didn't work (${safe(redact(review.error ?? "no reason given"))}), so only what was measured is listed.` : "";
@@ -1345,6 +1435,7 @@ const exitCode = interrupted ? EXIT.interrupted : flag("fail-on-issues") && prov
 if (json) {
   if (warning) process.stderr.write(`${errColors.yellow("!")} ${warning}\n`);
   if (product.file === PRODUCT_NEW) process.stderr.write(`${errColors.yellow("!")} ${shown}/PRODUCT.md isn't the one it last wrote, so it was left as it is; this run's is ${shown}/${PRODUCT_NEW}\n`);
+  if (startersLine) process.stderr.write(`${startersLine}\n`);
   process.stdout.write(`${JSON.stringify(map, null, 2)}\n`);
   await journeysClosed;
   await exitWhenWritten(exitCode);
@@ -1369,6 +1460,7 @@ const handOff = fixNext();
 const next = menuShown && handOff ? "" : handOff ?? wallNext(map, detectUrl(process.cwd()).url) ?? agentHint() ?? `Next: read ${shown}/${product.file}`;
 if (flag("verbose")) summary(outColors);
 else for (const line of resultLines(map, { ...facts, noAi: !ai, ...(ai ? { ai: ai.via, plan: Boolean(ai.plan) } : {}), begun, warning, next, standInSaid }, outColors, columnsOf(process.stdout))) say(line);
+if (startersLine) say(`  ${outColors.grey(startersLine)}`);
 // A person at the terminal: the menu, from "found" to "fixing" (see hand-off.ts). Everything is
 // written and the exit code decided by now, and each wait ends on its own after KEY_WAIT_MS (see
 // waitForKey). A script run at a terminal can't be told from a person, so it waits too, up to that
@@ -1573,7 +1665,7 @@ function unwritable(dir: string): string | undefined {
 
 /**
  * The output folder, with a .gitignore that keeps the private files out of git: a saved sign-in
- * (--login) is a live session, and the reading caches are only for reuse. PRODUCT.md and the rest are
+ * (--login) is a live session, as is a test's (test --setup, in .auth/), and the reading caches are only for reuse. PRODUCT.md and the rest are
  * meant to be committed.
  */
 function prepareOut(): void {
@@ -1581,7 +1673,7 @@ function prepareOut(): void {
   mkdirSync(out, { recursive: true });
   const ignore = join(out, ".gitignore");
   const has = existsSync(ignore) ? readFileSync(ignore, "utf8").split(/\r?\n/) : [];
-  const missingLines = [".session.json", ".reading.json", ".code-read.json", ".review.json"].filter((line) => !has.includes(line));
+  const missingLines = [".session.json", ".reading.json", ".code-read.json", ".review.json", ".auth/"].filter((line) => !has.includes(line));
   if (missingLines.length) appendFileSync(ignore, `${has.length && has.at(-1) !== "" ? "\n" : ""}${missingLines.join("\n")}\n`);
 }
 
